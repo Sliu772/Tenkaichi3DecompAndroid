@@ -1,3 +1,4 @@
+
 name: iOS Build
 
 on:
@@ -19,24 +20,24 @@ jobs:
       - name: Checkout SDL3
         run: git clone --depth 1 --branch release-3.4.12 https://github.com/libsdl-org/SDL.git SDL3
 
-      - name: Configure SDL3 for iOS
+      - name: Check Xcode target
+        run: xcodebuild -list -project SDL3/Xcode/SDL/SDL.xcodeproj
+
+      - name: Build SDL3 xcframework
         run: |
-          cmake -S SDL3 -B build-sdl3 -G Xcode \
-            -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_SYSROOT=iphoneos \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
-            -DSDL_SHARED=OFF \
-            -DSDL_STATIC=ON \
-            -DSDL_TESTS=OFF \
-            -DSDL_EXAMPLES=OFF
+          xcodebuild \
+            -project SDL3/Xcode/SDL/SDL.xcodeproj \
+            -target SDL3.xcframework \
+            -configuration Release
 
-      - name: Build SDL3
-        run: cmake --build build-sdl3 --config Release
+      - name: Verify framework
+        run: |
+          find SDL3/Xcode/SDL -name "SDL3.xcframework" -type d -print
+          test -d SDL3/Xcode/SDL/build/SDL3.xcframework || find SDL3/Xcode/SDL -name "SDL3.xcframework" -type d
 
-      - name: Upload build output
+      - name: Upload SDL3 xcframework
         uses: actions/upload-artifact@v4
         with:
-          name: sdl3-ios-arm64
-          path: build-sdl3/**/*.a
-          if-no-files-found: error
+          name: SDL3-xcframework-ios
+          path: SDL3/Xcode/SDL/build/SDL3.xcframework
+          if-no-files-found: warn
