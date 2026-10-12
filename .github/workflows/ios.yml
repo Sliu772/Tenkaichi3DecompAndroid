@@ -1,0 +1,42 @@
+name: iOS Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ios-prototype
+    paths:
+      - ".github/workflows/ios.yml"
+
+jobs:
+  build-sdl3:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Checkout SDL3
+        run: git clone --depth 1 --branch release-3.4.12 https://github.com/libsdl-org/SDL.git SDL3
+
+      - name: Configure SDL3 for iOS
+        run: |
+          cmake -S SDL3 -B build-sdl3 -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            -DSDL_SHARED=OFF \
+            -DSDL_STATIC=ON \
+            -DSDL_TESTS=OFF \
+            -DSDL_EXAMPLES=OFF
+
+      - name: Build SDL3
+        run: cmake --build build-sdl3 --config Release
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdl3-ios-arm64
+          path: build-sdl3/**/*.a
+          if-no-files-found: error
