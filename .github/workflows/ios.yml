@@ -1,43 +1,77 @@
-
 name: iOS Build
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - ios-prototype
+    branches: [ios-prototype]
     paths:
       - ".github/workflows/ios.yml"
+      - "port/tools/**"
+      - "port/src/**"
+      - "src/**"
+      - "include/**"
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # Seconds. Does the soft-float ABI work for the Darwin triple, and how are variadic arguments passed? (ios_abi_check.sh)
+  abi-check:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: LLVM 21 for macOS
+        run: sh port/tools/ios_toolchain.sh
+      - name: ABI check
+        run: sh port/tools/ios_abi_check.sh 2>&1 | tee abi-check.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: abi-check, path: abi-check.log }
+
   build-sdl3:
     runs-on: macos-14
-
     steps:
-      - name: Checkout project
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Checkout SDL3
         run: git clone --depth 1 --branch release-3.4.12 https://github.com/libsdl-org/SDL.git SDL3
-
-      - name: Check Xcode target
-        run: xcodebuild -list -project SDL3/Xcode/SDL/SDL.xcodeproj
-
       - name: Build SDL3 xcframework
         run: |
-          xcodebuild \
-            -project SDL3/Xcode/SDL/SDL.xcodeproj \
-            -target SDL3.xcframework \
-            -configuration Release
-
+          xcodebuild -project SDL3/Xcode/SDL/SDL.xcodeproj -target SDL3.xcframework -configuration Release
       - name: Verify framework
-        run: |
-          find SDL3/Xcode/SDL -name "SDL3.xcframework" -type d -print
-          test -d SDL3/Xcode/SDL/build/SDL3.xcframework || find SDL3/Xcode/SDL -name "SDL3.xcframework" -type d
-
-      - name: Upload SDL3 xcframework
-        uses: actions/upload-artifact@v4
+        run: find SDL3/Xcode/SDL -name "SDL3.xcframework" -type d -print
+      - uses: actions/upload-artifact@v4
         with:
           name: SDL3-xcframework-ios
           path: SDL3/Xcode/SDL/build/SDL3.xcframework
           if-no-files-found: warn
+
+  # Step 1: do the engine's 332+ sources compile for iOS arm64 (the same pipeline as Android: ptr32, irfix, llc)?
+  engine-compile:
+    runs-on: macos-14
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - name: LLVM 21 for macOS
+        run: sh port/tools/ios_toolchain.sh
+      - name: Shader compiler
+        run: brew install shaderc
+      - name: SDL3 headers
+        run: git clone --depth 1 --branch release-3.4.12 https://github.com/libsdl-org/SDL.git SDL3
+      - name: Compile the engine
+        run: |
+          set -o pipefail
+          export BT3_PLATFORM=ios
+          export BT3_SYSROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
+          export BT3_SDL3="$PWD/SDL3"
+          export BT3_SKELETON=1
+          export BT3_JOBS="$(sysctl -n hw.ncpu)"
+          python3 port/tools/android.py compile 2>&1 | tee compile.log
+      - name: Summary
+        if: always()
+        run: |
+          { echo '### Engine compile (iOS arm64)'; grep -E '^compiled:' compile.log || echo 'did not finish';
+            echo; echo '```'; grep -E '^FAILED' compile.log | head -60; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: engine-compile-log, path: compile.log }

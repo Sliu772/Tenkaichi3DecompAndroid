@@ -27,13 +27,15 @@ Environment (defaults: the folders port/tools/android_toolchain.sh unpacks):
 import concurrent.futures, os, pathlib, re, shutil, struct, subprocess, sys
 
 HERE = pathlib.Path(__file__).resolve().parent
+PLATFORM = os.environ.get("BT3_PLATFORM", "android")  # "ios": the same recipe for iOS arm64 (needs macOS + Xcode), see port/tools/ios_toolchain.sh
+IOS = PLATFORM == "ios"
 ROOT = HERE.parents[1]
-TC = pathlib.Path(os.environ.get("BT3_TOOLCHAIN", str(ROOT / "port/build/android-toolchain")))
+TC = pathlib.Path(os.environ.get("BT3_TOOLCHAIN", str(ROOT / ("port/build/ios-toolchain" if IOS else "port/build/android-toolchain"))))
 LLVM = pathlib.Path(os.environ.get("BT3_LLVM", str(TC / "llvm")))
 SYSROOT = pathlib.Path(os.environ.get("BT3_SYSROOT", str(TC / "ndk/sysroot")))
 CLANG_RT = pathlib.Path(os.environ.get("BT3_CLANG_RT", str(TC / "ndk/clang_rt")))
 SDL3 = pathlib.Path(os.environ.get("BT3_SDL3", str(TC / "sdl3")))
-GLSLC = os.environ.get("BT3_GLSLC", str(TC / "ndk/bin/glslc"))
+GLSLC = os.environ.get("BT3_GLSLC", "glslc" if IOS else str(TC / "ndk/bin/glslc"))
 API = os.environ.get("BT3_ANDROID_API", "29")
 
 # the Python side of libclang for ptr32.py: the installation's own if it has one, else what the toolchain unpacked
@@ -41,17 +43,18 @@ for p in (LLVM / "lib/python3/site-packages", TC / "clang-bindings"):
     if p.exists():
         sys.path.insert(0, str(p))
 os.environ["LD_LIBRARY_PATH"] = os.pathsep.join([str(LLVM / "lib"), str(pathlib.Path(GLSLC).parent), os.environ.get("LD_LIBRARY_PATH", "")])
+LIBCLANG = LLVM / ("lib/libclang.dylib" if IOS else "lib/libclang.so")
 sys.path.insert(0, str(HERE))
 import portsrc, eeconst, irfix  # noqa: E402
 try:
     import clang.cindex as _ci
-    if (LLVM / "lib/libclang.so").exists():
-        _ci.Config.set_library_file(str(LLVM / "lib/libclang.so"))
+    if LIBCLANG.exists():
+        _ci.Config.set_library_file(str(LIBCLANG))
 except ImportError:
     pass
 import ptr32  # noqa: E402
 
-OUT = ROOT / "port/build/android"
+OUT = ROOT / ("port/build/ios" if IOS else "port/build/android")
 OBJ = OUT / "obj"
 DATA = OUT / "obj_data"
 GEN = OUT / "gen"
@@ -60,8 +63,11 @@ BASE = int(os.environ.get("BT3_ANDROID_BASE", "0x03000000"), 0)  # below an app'
 
 CLANG = str(LLVM / "bin/clang")
 LLC = str(LLVM / "bin/llc")
-TARGET = [f"--target=aarch64-linux-android{API}", f"--sysroot={SYSROOT}"]
-SOFT = ["-mabi=aapcs-soft", "-mgeneral-regs-only"]
+IOS_MIN = os.environ.get("BT3_IOS_MIN", "15.0")
+TARGET = ([f"--target=arm64-apple-ios{IOS_MIN}", "-isysroot", str(SYSROOT)] if IOS  # SYSROOT: the iPhoneOS SDK (xcrun --sdk iphoneos --show-sdk-path)
+          else [f"--target=aarch64-linux-android{API}", f"--sysroot={SYSROOT}"])
+PLAT_DEF = ["-DBT3_IOS=1"] if IOS else ["-DBT3_ANDROID=1"]
+SOFT = os.environ.get("BT3_SOFT", "-mabi=aapcs-soft -mgeneral-regs-only").split()  # (iOS: Darwin passes variadic arguments differently, see port/tools/ios_abi_check.sh)
 # the game's code: the flags of undefined.py's CC, for this target
 GAME = [CLANG] + TARGET + ["-std=gnu89", "-c", "-O2", "-g1", "-fno-strict-aliasing", "-ffp-contract=off", "-fcommon", "-w",
                            "-fPIE", "-fno-stack-protector", "-fno-builtin", "-fms-extensions", "-Wno-error=return-mismatch"] + SOFT + \
@@ -124,7 +130,7 @@ def newlib_source(f):
     return (o if r.returncode == 0 else None), f.name, r.stderr
 
 
-HARD = [CLANG] + TARGET + ["-c", "-O2", "-g1", "-fPIE", "-fno-strict-aliasing", "-DBT3_ANDROID=1"]
+HARD = [CLANG] + TARGET + ["-c", "-O2", "-g1", "-fPIE", "-fno-strict-aliasing", *PLAT_DEF]
 
 
 def port_source(f):
@@ -132,7 +138,7 @@ def port_source(f):
     names = ["-include", "vu0_names.h", "-DREF_VU0_EXTERN_ARITH"] if f.parent.name == "port" and f.parent.parent.name == "src" else []
     hard = f.name in ("plat_libm.c", "plat_fastvec.c")
     cmd = [CLANG] + TARGET + ["-std=gnu99", "-c", "-O2", "-g1", "-fPIE", "-fno-strict-aliasing", "-ffp-contract=off", "-fno-builtin", "-w",
-                              "-fms-extensions", "-DBT3_ANDROID=1", "-Iinclude", "-Iport/include", "-Iport/src", f"-I{SDL3 / 'include'}"]
+                              "-fms-extensions", *PLAT_DEF, "-Iinclude", "-Iport/include", "-Iport/src", f"-I{SDL3 / 'include'}"]
     if not hard:
         cmd += SOFT + ["-DSF_FAST_CALLS", "-include", "math.h", "-include", "stdlib.h", "-include", "port_libm.h"]
     cmd += names
@@ -152,7 +158,7 @@ def gs_source(f):
 def cxx_source(f):
     o = OBJ / ("cxx_" + f.stem + ".o")
     imgui = ROOT / "port/third_party/imgui"
-    r = run([str(LLVM / "bin/clang++")] + TARGET + ["-std=c++17", "-c", "-O2", "-g1", "-fPIE", "-fno-exceptions", "-fno-rtti", "-w", "-DBT3_ANDROID=1",
+    r = run([str(LLVM / "bin/clang++")] + TARGET + ["-std=c++17", "-c", "-O2", "-g1", "-fPIE", "-fno-exceptions", "-fno-rtti", "-w", *PLAT_DEF,
                                                    f"-I{imgui}", f"-I{ROOT / 'port/src/gs'}", f"-I{SDL3 / 'include'}", str(f), "-o", str(o)])
     return (o if r.returncode == 0 else None), f.name, r.stderr
 
@@ -194,7 +200,7 @@ def compile_all():
     jobs += [(game_source, f) for f in portsrc.sources()]
     jobs += [(newlib_source, f) for f in sorted((ROOT / "port/third_party/newlib_libm").glob("*.c"))]
     jobs += [(port_source, f) for f in [ROOT / "src/port/vu0_a.c", ROOT / "src/port/vu0_b.c"] + sorted((ROOT / "port/src").glob("*.c"))]
-    jobs += [(gs_source, f) for f in sorted((ROOT / "port/src/gs").glob("*.c"))]
+    jobs += [(gs_source, f) for f in sorted((ROOT / "port/src/gs").glob("*.c")) if not (IOS and f.name == "gs_gl.c")]  # (iOS: Vulkan through MoltenVK only)
     jobs += [(cxx_source, f) for f in sorted((ROOT / "port/third_party/imgui").glob("*.cpp")) + sorted((ROOT / "port/src/gs").glob("*.cpp"))]
     only = os.environ.get("BT3_ONLY")  # a few files: BT3_ONLY=btl_obj,plat_mem
     if only:
@@ -560,6 +566,9 @@ def main():
     ok = True
     if "compile" in args:
         ok = compile_all()
+    if IOS and any(a in args for a in ("link", "loader", "install")):
+        print("iOS: only \"compile\" is done so far (the Mach-O link comes next)")
+        sys.exit(0 if ok else 1)
     if "link" in args and (ok or os.environ.get("BT3_LINK_ANYWAY")):
         ok = link()
     if "loader" in args and ok:
