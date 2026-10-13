@@ -356,7 +356,11 @@ void EftBlastObj_Init(EftOTask *task, EftBlastObjArg *arg) {
     EftOSrc *src;
     s32 slot;
 
+#ifndef PORT /* FAKE MATCH only: on the port, taking the parameter's address makes ptr32.py keep `arg` as a 4-byte
+                 pointer, but every caller (BtlTask_Init -> cls->init) passes an ordinary 64-bit one, so Init read
+                 hdr + the low 32 bits of the real address (bt3 logs 45-54) */
     (void)&arg;
+#endif
 #ifdef PORT
     {
         static int n;
