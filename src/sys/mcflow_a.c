@@ -2733,13 +2733,13 @@ void McFlow_Start(s32 mode) {
 }
 
 /* Registers the "finished" callback and argument of result `idx`. */
-void McFlow_SetDoneCb(s32 idx, McFlowCb cb, s32 arg) {
+void McFlow_SetDoneCb(s32 idx, void (*cb)(s32 arg), s32 arg) {
     gMcFlow->doneCb[idx] = cb;
     gMcFlow->doneArg[idx] = arg;
 }
 
 /* Registers a callback and argument per mode and result. */
-void McFlow_SetModeCb(s32 mode, s32 idx, McFlowCb cb, s32 arg) {
+void McFlow_SetModeCb(s32 mode, s32 idx, void (*cb)(s32 arg), s32 arg) {
     gMcFlow->modeCb[mode][idx] = cb;
     gMcFlow->modeArg[mode][idx] = arg;
 }

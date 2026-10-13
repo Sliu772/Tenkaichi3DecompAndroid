@@ -142,8 +142,10 @@ void McFlow_UpdateReplayAsk(void);
 void McFlow_Init(void);
 void McFlow_Term(void);
 void McFlow_Start(s32 mode);
-void McFlow_SetDoneCb(s32 idx, McFlowCb cb, s32 arg);
-void McFlow_SetModeCb(s32 mode, s32 idx, McFlowCb cb, s32 arg);
+/* cb is spelled out, not McFlowCb: a parameter written with a typedef of a pointer would be a 4-byte pointer on the
+ * call boundary, while every caller (menu_a.h: void *cb) passes an ordinary one (see ptr32.py). */
+void McFlow_SetDoneCb(s32 idx, void (*cb)(s32 arg), s32 arg);
+void McFlow_SetModeCb(s32 mode, s32 idx, void (*cb)(s32 arg), s32 arg);
 void McFlow_SetSlot(s32 slot);
 s32 McFlow_PollCard(void);
 s32 McFlow_Update(void);

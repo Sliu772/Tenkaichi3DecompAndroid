@@ -123,9 +123,13 @@ jobs:
           # an ordinary pointer truncated to 32 bits without the header subtracted (the symptom of the crash)
           { grep -HnE 'ptrtoint ptr [%@][^ ]+ to i32' port/build/ios/obj/*.ll | grep -v '\.raw\.ll' ; } > ir/suspect_trunc_to_i32.txt 2>&1 || true
           { grep -HnE 'addrspacecast \(ptr @' port/build/ios/obj/*.ll | grep -v '\.raw\.ll' ; } > ir/leftover_addrspacecast.txt 2>&1 || true
+          # function defined with one kind of pointer parameter and declared with another in a different object
+          python3 port/tools/abi_sig_check.py $(ls port/build/ios/obj/*.ll | grep -v '\.raw\.ll') > ir/abi_mismatch.txt 2>ir/abi_mismatch.summary || true
+          cat ir/abi_mismatch.summary
           wc -l ir/*.txt
           { echo '### IR diagnostics'; echo '```'; head -80 ir/bootcard_ir.txt; echo '```'
             echo; echo "Suspect absolute addresses: $(wc -l < ir/suspect_absolute_addresses.txt)"
+            echo; echo "Signature mismatches between objects: $(wc -l < ir/abi_mismatch.txt)"; echo '```'; head -40 ir/abi_mismatch.txt; echo '```'
             echo "Suspect 32-bit truncations: $(wc -l < ir/suspect_trunc_to_i32.txt)"
             echo "Leftover addrspacecast of a symbol: $(wc -l < ir/leftover_addrspacecast.txt)"; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
