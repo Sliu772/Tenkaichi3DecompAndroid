@@ -55,7 +55,7 @@ extern s32 gBtlLoadObj;    /* object made from it */
 
 /* sys/file.h declares File_Request with two parameters (it ignores a third); every caller here passes the
  * buffer size as a third argument, so the calls go through a cast. */
-#define File_Request3(id, buf, size) ((void *(*)(s32, void *, s32))File_Request)(id, buf, size)
+#define File_Request3(id, buf, size) File_Request((id), (buf))
 
 extern void Fade_Start(s32 idx, s32 dir, f32 seconds);
 extern s32 Fade_IsDone(s32 idx);

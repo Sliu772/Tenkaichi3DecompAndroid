@@ -33,7 +33,7 @@
 
 extern void *memset(void *dst, s32 c, u32 n);
 /* file.h declares File_Request with two arguments; the callers here pass a third (0), as battle_load.c does */
-#define File_Request3(id, buf, size) ((void *(*)(s32, void *, s32))File_Request)(id, buf, size)
+#define File_Request3(id, buf, size) File_Request((id), (buf))
 extern void Vec4_Add(Vec4 *out, Vec4 *a, Vec4 *b);
 extern void Vec4_Sub(Vec4 *out, Vec4 *a, Vec4 *b);
 extern void Vec4_Scale(Vec4 *out, Vec4 *in, f32 scale);

@@ -9,7 +9,7 @@ extern void *memset(void *dst, s32 value, u32 size);
 extern void Snd_LoadBank(s32 mask, void *data, s32 unk);
 
 /* File_Request is called here with a third argument (the buffer size) that it ignores. */
-#define File_RequestSized ((void *(*)(s32, void *, s32))File_Request)
+#define File_RequestSized(id, buf, size) File_Request((id), (buf))
 
 /* Reads file 5 and allocates the buffers of files 2, 3 and 4 from their sizes. */
 void Common_LoadBoot(void) {

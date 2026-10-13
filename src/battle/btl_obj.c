@@ -101,7 +101,7 @@ extern void GfxAlphaKey_Draw(void);
 extern f32 gBtlObjFarDist[];
 
 /* File_Request is called with a third argument (the buffer size), which it ignores. */
-#define File_Request3(id, buf, size) ((void *(*)(s32, void *, s32))File_Request)(id, buf, size)
+#define File_Request3(id, buf, size) File_Request((id), (buf))
 
 /* BtlObj_UpdateVisibility only matches when the compiler has not seen the body of BtlObjVis_GetList (it changes
    a branch-likely choice): the original had a file boundary somewhere between the two. */
