@@ -101,22 +101,32 @@ jobs:
         if: always()
         run: |
           mkdir -p ir
-          cp port/build/ios/obj/*menu_i_b*.ll ir/ 2>/dev/null || true
+          cp port/build/ios/obj/*menu_i_b*.ll port/build/ios/obj/*sys_mcflow_a*.ll ir/ 2>/dev/null || true
           {
             echo "== BootCard_Init, raw clang IR =="
             awk '/^define .*@BootCard_Init\(/ {p=1} p {print} p && /^}/ {exit}' port/build/ios/obj/menu_menu_i_b.raw.ll
             echo; echo "== BootCard_Init, after irfix + p32rebase =="
             awk '/^define .*@BootCard_Init\(/ {p=1} p {print} p && /^}/ {exit}' port/build/ios/obj/menu_menu_i_b.ll
+            for v in raw final; do
+              f=port/build/ios/obj/sys_mcflow_a.ll; [ $v = raw ] && f=port/build/ios/obj/sys_mcflow_a.raw.ll
+              echo; echo "== McFlow_SetDoneCb (the callee), $v IR =="
+              awk '/^define .*@McFlow_SetDoneCb\(/ {p=1} p {print} p && /^}/ {exit}' "$f"
+              echo; echo "== McFlow_Update, $v IR (first 40 lines) =="
+              awk '/^define .*@McFlow_Update\(/ {p=1} p {print} p && /^}/ {exit}' "$f" | head -40
+            done
             echo; echo "== declaration of McFlow_SetDoneCb =="
             grep -hE '(declare|define) .*@McFlow_SetDoneCb' port/build/ios/obj/menu_menu_i_b.raw.ll
           } > ir/bootcard_ir.txt 2>&1 || true
           # every function address that is still an absolute address in the final IR (what BootCard_Init suffered from)
           { grep -HnE 'ptrtoint \(ptr @[A-Za-z_][A-Za-z0-9_.$]* to i(32|64)\)' port/build/ios/obj/*.ll \
               | grep -v '\.raw\.ll' | grep -v '_mh_execute_header' | grep -v 'sub (i64\|i64 sub' ; } > ir/suspect_absolute_addresses.txt 2>&1 || true
+          # an ordinary pointer truncated to 32 bits without the header subtracted (the symptom of the crash)
+          { grep -HnE 'ptrtoint ptr [%@][^ ]+ to i32' port/build/ios/obj/*.ll | grep -v '\.raw\.ll' ; } > ir/suspect_trunc_to_i32.txt 2>&1 || true
           { grep -HnE 'addrspacecast \(ptr @' port/build/ios/obj/*.ll | grep -v '\.raw\.ll' ; } > ir/leftover_addrspacecast.txt 2>&1 || true
           wc -l ir/*.txt
           { echo '### IR diagnostics'; echo '```'; head -80 ir/bootcard_ir.txt; echo '```'
             echo; echo "Suspect absolute addresses: $(wc -l < ir/suspect_absolute_addresses.txt)"
+            echo "Suspect 32-bit truncations: $(wc -l < ir/suspect_trunc_to_i32.txt)"
             echo "Leftover addrspacecast of a symbol: $(wc -l < ir/leftover_addrspacecast.txt)"; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()

@@ -107,8 +107,6 @@ def compile_ee(cmd, src, o, game_text=True):
     r = run(c2 + ["-S", "-emit-llvm", "-x", "cpp-output", str(i), "-o", str(ll)])
     if r.returncode:
         return r
-    if os.environ.get("BT3_KEEP"):   # diagnostics: clang's IR as it came out, before irfix / p32rebase
-        pathlib.Path(str(o)[:-2] + ".raw.ll").write_text(ll.read_text())
     text, _ = irfix.fix(ll.read_text(), stores=True, anchor="_mh_execute_header" if IOS else None)  # iOS: 4-byte pointers = offsets from the image header, see p32rebase.py
     ll.write_text(text)
     r = run([LLC, "-O2", "-filetype=obj", "-relocation-model=pic", str(ll), "-o", str(o)])
