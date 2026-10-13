@@ -20,7 +20,7 @@ extern void Port_StateTouch(void *p, unsigned long n); /* gs/state.c */
 int sceSifInitIopHeap() { return 0; }
 extern void *Port_LowAlloc(size_t size); /* plat_mem.c: the game keeps these addresses in 4 bytes */
 extern void Port_LowFree(void *addr);
-void *sceSifAllocIopHeap(int size) { return Port_LowAlloc((size_t)size); } /* "IOP memory": ordinary memory */
+void *sceSifAllocIopHeap(int size) { return (void *)(uintptr_t)Port_P2A(Port_LowAlloc((size_t)size)); } /* "IOP memory": ordinary memory; the game gets the 4-byte ADDRESS */
 int sceSifFreeIopHeap(void *addr) { Port_LowFree(addr); return 0; }
 int sceSifQueryTotalFreeMemSize() { return 0x100000; }
 int sceSifQueryMaxFreeMemSize() { return 0x100000; }

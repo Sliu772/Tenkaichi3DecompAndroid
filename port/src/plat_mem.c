@@ -730,7 +730,9 @@ void *Port_Malloc(uint32_t size) {
             fprintf(stderr, "bt3 malloc: size 0x%X -> offset 0x%X, host %p (heap next 0x%X, end 0x%X)\n", size, p, Port_A2P(p), sHeapNext, sHeapEnd);
         }
     }
-    return Port_A2P(p);
+    /* The game's files are compiled with 4-byte pointers and keep this result as it is: it must be the ADDRESS (an offset
+       from the header on iOS), not the host pointer, whose low half is header + offset (wrong). Elsewhere PORT_BASE is 0. */
+    return (void *)(uintptr_t)p;
 }
 
 /* Memory the port hands to the game by address (file handles, the "second processor's" memory): zeroed, and below

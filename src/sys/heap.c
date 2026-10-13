@@ -70,7 +70,12 @@ HeapBlock *Heap_NextBlock(HeapBlock *block) {
 }
 
 void Heap_Create(void) {
+#ifdef __APPLE__
+    /* iOS: (u32)D_3BE71C is the low half of the symbol's real address (it changes with ASLR); the heap start is the number */
+    s32 size = 0x1EFB000 - 0x3BE71C;
+#else
     s32 size = 0x1EFB000 - (u32)D_3BE71C;
+#endif
     HeapBlock *start;
 
     size += Mem_Align4Pad(size);
