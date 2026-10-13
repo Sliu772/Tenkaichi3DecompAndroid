@@ -61,7 +61,7 @@ _GEP271 = re.compile(r'^getelementptr(?: inbounds| nuw| nusw)* \(i8, ptr addrspa
 _INTTOPTR = re.compile(r'^inttoptr \(i(?:32|64) (-?\d+) to ptr addrspace\(271\)\)$')
 
 
-def fold_up(line, anchor):
+def fold_up(line, anchor, cx, pre):
     """Constant `addrspacecast (ptr addrspace(271) C to ptr)` (a 4-byte pointer constant used as an ordinary one, e.g. an
     argument of a call into the port): when C is the 4-byte form of a symbol (+ offset), the result is that symbol's own
     address; a plain integer N is  @hdr + N."""
@@ -84,16 +84,14 @@ def fold_up(line, anchor):
             m = _INTTOPTR.match(c)
             if m:
                 out.append(line[pos:k] + f"getelementptr (i8, ptr @{anchor}, i64 {int(m.group(1)) & 0xffffffff})")
-            else:  # any other constant: hdr + zext(its 32-bit value)
-                out.append(line[pos:k] + f"getelementptr (i8, ptr @{anchor}, i64 zext (i32 ptrtoint (ptr addrspace(271) {c} to i32) to i64))")
+            else:  # any other constant: hdr + its 32-bit value, with instructions (LLVM 21 has no zext constant expressions)
+                out.append(line[pos:k] + cx.to_ptr(c, pre))
         pos = end
     return "".join(out) + line[pos:]
 
 
 def fold_consts(line, anchor):
     """`addrspacecast (ptr X to ptr addrspace(271))` -> `inttoptr (i32 <offset of X> to ptr addrspace(271))`."""
-    if UPC in line:
-        line = fold_up(line, anchor)
     out, pos = [], 0
     while True:
         k = line.find(CASTC, pos)
@@ -152,9 +150,12 @@ def rebase(text, anchor):
         if not in_fn or OPQ not in line and "addrspace(271)" not in line:
             out.append(line)
             continue
+        pre = []
+        if UPC in line:
+            line = fold_up(line, anchor, cx, pre)
         if CASTC in line:
             line = fold_consts(line, anchor)
-        pre = []
+        pre = [fold_consts(x, anchor) if CASTC in x else x for x in pre]
         m = CAST_TO_PTR.match(line)
         if m:
             q = cx.to_ptr(m.group(2), pre)
@@ -191,7 +192,7 @@ def rebase(text, anchor):
                     e = operand_end(line, s)
                     q = cx.to_ptr(line[s:e], pre)
                     line = line[:mm.end() - len(OPQ) - 1] + f"ptr {q}" + line[e:]
-            out.extend(pre)
+        out.extend(pre)
         out.append(line)
     text = "\n".join(out)
     if f"@{anchor} =" not in text:

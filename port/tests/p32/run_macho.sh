@@ -33,4 +33,12 @@ HDR=$(addr __mh_execute_header)
 echo "--- linked data tables:"
 "$OBJDUMP" -s --section=__data "$T/out" | tail -n +3
 for s in _n1 _n2 _dbl _gFnStatic _gBuf _gBufP; do echo "$s = $(addr $s)  (offset from header: $(printf '0x%x' $(( $(addr $s) - HDR ))))"; done
+# hand-written IR with odd constant forms must survive the pass and compile (no zext constant expressions etc.)
+python3 - "$HERE/odd.ll" "$T/odd2.ll" "$TOOLS" <<'PY'
+import sys; sys.path.insert(0, sys.argv[3])
+import irfix
+t, n = irfix.fix(open(sys.argv[1]).read(), stores=True, anchor="_mh_execute_header")
+open(sys.argv[2], "w").write(t)
+PY
+"$LLVM/bin/llc" -O2 -filetype=obj -relocation-model=pic "$T/odd2.ll" -o "$T/odd.o" && echo "odd constant forms: OK"
 echo "OK: linked; compare the table words with the offsets above"
