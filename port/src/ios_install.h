@@ -401,23 +401,55 @@ static int inst_present(void) {
            !inst_exists("gamedata/.installing");
 }
 
-/* The first *.iso in the current folder (Documents). */
-static int inst_find_iso(char *out, size_t size) {
-    DIR *dp = opendir(".");
-    struct dirent *e;
-    int found = 0;
+/* 1 when `path` is a regular file that starts like an ISO 9660 image (the volume descriptor at sector 16). */
+static int inst_looks_like_iso(const char *path) {
+    uint8_t d[8];
+    int fd = open(path, O_RDONLY), ok;
 
-    if (dp == NULL) {
+    if (fd < 0) {
         return 0;
     }
-    while (!found && (e = readdir(dp)) != NULL) {
+    ok = inst_pread(fd, 16ull * INST_SECTOR, d, sizeof(d)) == 0 && d[0] == 1 && memcmp(d + 1, "CD001", 5) == 0;
+    close(fd);
+    return ok;
+}
+
+/* The disc image in the current folder (Documents): a *.iso first; failing that, any large file that is an ISO 9660
+   image whatever its name (a copy that was renamed ".iso.zip", "SLUS-21678.iso.iso" ...). Every entry is logged, so the
+   log says what the app saw. *nFiles: how many files there are. */
+static int inst_find_iso(char *out, size_t size, int *nFiles) {
+    DIR *dp = opendir(".");
+    struct dirent *e;
+    struct stat st;
+    int found = 0;
+    char byContent[512];
+
+    byContent[0] = '\0';
+    *nFiles = 0;
+    if (dp == NULL) {
+        fprintf(stderr, "bt3 install: cannot read the folder: %s\n", strerror(errno));
+        return 0;
+    }
+    while ((e = readdir(dp)) != NULL) {
         size_t n = strlen(e->d_name);
-        if (n > 4 && strcasecmp(e->d_name + n - 4, ".iso") == 0 && n < size) {
+        if (e->d_name[0] == '.' || stat(e->d_name, &st) != 0 || !S_ISREG(st.st_mode)) {
+            continue;
+        }
+        (*nFiles)++;
+        fprintf(stderr, "bt3 install: sees \"%s\" (%llu bytes)\n", e->d_name, (unsigned long long)st.st_size);
+        if (!found && n > 4 && strcasecmp(e->d_name + n - 4, ".iso") == 0 && n < size) {
             snprintf(out, size, "%s", e->d_name);
             found = 1;
+        } else if (byContent[0] == '\0' && st.st_size > (off_t)(256 << 20) && n < sizeof(byContent) &&
+                   inst_looks_like_iso(e->d_name)) {
+            snprintf(byContent, sizeof(byContent), "%s", e->d_name);
         }
     }
     closedir(dp);
+    if (!found && byContent[0] != '\0' && strlen(byContent) < size) {
+        snprintf(out, size, "%s", byContent);
+        found = 1;
+    }
     return found;
 }
 
@@ -573,20 +605,39 @@ finish:
     return rc;
 }
 
+/* The game's folder is the app's Documents (Files app > On My iPhone > BT3): go there first, whatever the working folder
+   became since the program started. */
+static void inst_enter_documents(void) {
+    const char *home = getenv("HOME");
+    char docs[1100], cwd[1024];
+
+    if (home != NULL) {
+        snprintf(docs, sizeof(docs), "%s/Documents", home);
+        if (chdir(docs) != 0) {
+            fprintf(stderr, "bt3 install: cannot enter %s: %s\n", docs, strerror(errno));
+        }
+    }
+    fprintf(stderr, "bt3 install: working folder %s\n", getcwd(cwd, sizeof(cwd)) != NULL ? cwd : "(unknown)");
+}
+
 /* Called by plat_ios.c before the game starts. Returns when the game's data is there; with nothing to install from,
    or with an error, the message stays on the screen. */
 static void ios_prepare_data(void) {
-    char iso[512];
+    char iso[512], l2[96];
+    int nFiles = 0;
 
+    inst_enter_documents();
     if (inst_present()) {
+        fprintf(stderr, "bt3 install: the game's data is already installed\n");
         return;
     }
-    if (!inst_find_iso(iso, sizeof(iso))) {
-        inst_show("Falta la ISO de Budokai Tenkaichi 3", "Copia tu ISO (version USA, SLUS-21678) en:",
-                  "Archivos > En mi iPhone > BT3", "y abre la app otra vez.", -1.0f, 1);
+    if (!inst_find_iso(iso, sizeof(iso), &nFiles)) {
+        snprintf(l2, sizeof(l2), "No hay ninguna ISO en la app (%d archivos).", nFiles);
+        inst_show("Falta la ISO de Budokai Tenkaichi 3", l2, "Copiala a Archivos > En mi iPhone > BT3", "y abre la app otra vez.", -1.0f, 1);
         inst_stuck();
         return;
     }
+    fprintf(stderr, "bt3 install: disc image: %s\n", iso);
     if (inst_run(iso) != 0) {
         inst_stuck();
         return;
