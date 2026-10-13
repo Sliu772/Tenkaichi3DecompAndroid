@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "port_host.h"
 #include "plat_stages.h"
 #include "plat_songs.h"
 
@@ -77,6 +78,17 @@ static const char *alias_target(const char *rel) {
         if (end == NULL) break;
     }
     return NULL;
+}
+
+/* The handle (ADXF) is a typedef'd pointer of the game: it crosses the call as a 4-byte address (an offset from the header
+   on iOS), not as a host pointer like the `void *` / `char *` parameters, which the call converts itself. So the handle goes
+   back to the game as Port_P2A and comes in through Port_A2P (the same thing as a plain pointer where PORT_BASE is 0). */
+static PortFile *pf(void *h) {
+    return (PortFile *)Port_A2P((uint32_t)(uintptr_t)h);
+}
+
+static void *handle_out(PortFile *f) {
+    return (void *)(uintptr_t)Port_P2A(f);
 }
 
 static PortFile *open_rel(const char *rel) {
@@ -203,7 +215,7 @@ void *ADXF_OpenAfs(int ptid, int flid) {
     char rel[128];
 
     snprintf(rel, sizeof(rel), "%s/%05d.bin", sPartDir[ptid & 7], flid);
-    return open_rel(rel);
+    return handle_out(open_rel(rel));
 }
 
 /* A file outside the archives, named relative to the disc's data directory. */
@@ -220,11 +232,11 @@ void *ADXF_Open(char *fname, void *atr) {
     if (n > 4 && strcmp(&rel[n - 4], ".PSS") == 0) { /* a movie: its decoder (plat_movie.c) needs the path */
         Port_FilePath(0, 0, &rel[10], gPortMoviePath, sizeof(gPortMoviePath));
     }
-    return open_rel(rel);
+    return handle_out(open_rel(rel));
 }
 
 void ADXF_Close(void *h) {
-    PortFile *f = h;
+    PortFile *f = pf(h);
 
     if (f != NULL) {
         Port_LowFree(f); /* (the host's file stays open for a while: plat_fcache.c) */
@@ -232,12 +244,12 @@ void ADXF_Close(void *h) {
 }
 
 int ADXF_GetFsizeSct(void *h) {
-    return ((PortFile *)h)->sizeSct;
+    return pf(h)->sizeSct;
 }
 
 /* Reads nsct sectors at the current position; the part of the last sector behind the end of the file is zero. */
 int ADXF_ReadNw(void *h, int nsct, void *buf) {
-    PortFile *f = h;
+    PortFile *f = pf(h);
     size_t got;
 
     if (nsct > f->sizeSct - f->posSct) {
@@ -251,16 +263,16 @@ int ADXF_ReadNw(void *h, int nsct, void *buf) {
 }
 
 int ADXF_Stop(void *h) {
-    ((PortFile *)h)->stat = STAT_STOP;
+    pf(h)->stat = STAT_STOP;
     return 0;
 }
 
 int ADXF_GetStat(void *h) {
-    return ((PortFile *)h)->stat;
+    return pf(h)->stat;
 }
 
 int ADXF_Tell(void *h) {
-    return ((PortFile *)h)->posSct;
+    return pf(h)->posSct;
 }
 
 /* CRI set-up and servicing: nothing to do without a drive or a second thread. */

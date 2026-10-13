@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "gs_internal.h"
+#include "../port_host.h" /* Port_A2P / Port_P2A: the game's 4-byte addresses (offsets from the header on iOS) */
 
 enum { ADXT_STAT_STOP = 0, ADXT_STAT_PLAYING = 3, ADXT_STAT_PLAYEND = 5 };
 #define MAX_PLAYERS 16
@@ -387,6 +388,13 @@ static void start(Player *p, const char *path) {
 
 void ADXT_Init(void) {}
 
+/* The player (ADXT) is a typedef'd pointer of the game: it crosses the call as a 4-byte address (an offset from the header
+   on iOS), like the file handle (plat_file.c). It leaves as Port_P2A and comes back through Port_A2P; where PORT_BASE is 0
+   that is the pointer itself. */
+static void *adxt_in(void *h) {
+    return Port_A2P((uint32_t)(uintptr_t)h);
+}
+
 void *ADXT_Create(int maxnch, void *work, int worksize) {
     Player *p = &sPlayers[gPortAdxCount < MAX_PLAYERS ? gPortAdxCount++ : MAX_PLAYERS - 1];
 
@@ -396,7 +404,7 @@ void *ADXT_Create(int maxnch, void *work, int worksize) {
     p->pan[0] = p->pan[1] = PAN_AUTO;
     memset(&gPortAdxView[p - sPlayers], 0, sizeof(PortAdxView));
     gPortAdxView[p - sPlayers].pan[0] = gPortAdxView[p - sPlayers].pan[1] = PAN_AUTO;
-    return p;
+    return (void *)(uintptr_t)Port_P2A(p);
 }
 
 void ADXT_SetReloadSct(void *adxt, int nsct) { (void)adxt; (void)nsct; }
@@ -405,6 +413,7 @@ void ADXT_SetSvrFreq(void *adxt, int freq) { (void)adxt; (void)freq; }
 void ADXT_StartAfs(void *adxt, int patid, int fid) {
     char path[512];
 
+    adxt = adxt_in(adxt);
     if (adxt != NULL && Port_FilePath(patid, fid, NULL, path, sizeof(path))) {
         start(adxt, path);
         view_start(adxt, path);
@@ -414,6 +423,7 @@ void ADXT_StartAfs(void *adxt, int patid, int fid) {
 void ADXT_StartFname(void *adxt, char *fname) {
     char path[512];
 
+    adxt = adxt_in(adxt);
     if (adxt != NULL && Port_FilePath(0, 0, fname, path, sizeof(path))) {
         start(adxt, path);
         view_start(adxt, path);
@@ -421,6 +431,7 @@ void ADXT_StartFname(void *adxt, char *fname) {
 }
 
 void ADXT_Stop(void *adxt) {
+    adxt = adxt_in(adxt);
     if (adxt != NULL) {
         stop(adxt);
         gPortAdxView[(Player *)adxt - sPlayers].stat = ADXT_STAT_STOP;
@@ -428,7 +439,7 @@ void ADXT_Stop(void *adxt) {
 }
 
 void ADXT_Pause(void *adxt, int sw) {
-    Player *p = adxt;
+    Player *p = adxt_in(adxt);
 
     if (p == NULL) {
         return;
@@ -450,7 +461,7 @@ void ADXT_Pause(void *adxt, int sw) {
 }
 
 void ADXT_SetOutVol(void *adxt, int vol) {
-    Player *p = adxt;
+    Player *p = adxt_in(adxt);
 
     if (p != NULL) {
         if (getenv("BT3_SND_VERBOSE") != NULL && p->vol != vol) {
@@ -463,13 +474,14 @@ void ADXT_SetOutVol(void *adxt, int vol) {
 }
 
 int ADXT_GetOutVol(void *adxt) {
+    adxt = adxt_in(adxt);
     /* From the game's state, not from the player: the game fades a stream by reading this and setting a little
        less, and a frame run again after a restore must read what the frame read the first time. */
     return adxt != NULL ? gPortAdxView[(Player *)adxt - sPlayers].vol : 0;
 }
 
 void ADXT_SetOutPan(void *adxt, int chan, int pan) {
-    Player *p = adxt;
+    Player *p = adxt_in(adxt);
 
     if (p != NULL && chan >= 0 && chan < 2) {
         if (p->stream != NULL) { SDL_LockAudioStream(p->stream); }
@@ -484,6 +496,7 @@ void ADXT_SetOutputMono(int flag) {
 }
 
 int ADXT_GetStat(void *adxt) {
+    adxt = adxt_in(adxt);
     if (adxt != NULL && by_ticks()) {
         return gPortAdxView[(Player *)adxt - sPlayers].stat; /* counted in vertical blanks, the same on every machine */
     }
