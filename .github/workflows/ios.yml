@@ -134,6 +134,14 @@ jobs:
         run: sh port/tools/ios_package.sh "$PWD/SDL3.xcframework"
       - name: What is inside the .ipa
         run: unzip -l port/build/ios/bt3.ipa | tail -n +4 | awk '{print $1, $4}' | grep -E "Frameworks/[^/]+/[^/]+$|bt3(\.dat)?$|Info.plist" | head -20
+      - name: Disassemble the heap functions
+        if: always()
+        run: |
+          xcrun otool -tV port/build/ios/bt3 > full_disasm.txt || true
+          { echo "== Heap_Create =="; grep -A70 "^_Heap_Create:" full_disasm.txt;
+            echo; echo "== Heap_AllocBlock =="; grep -A160 "^_Heap_AllocBlock:" full_disasm.txt;
+            echo; echo "== Port_Malloc =="; grep -A40 "^_Port_Malloc:" full_disasm.txt; } > heap_disasm.txt || true
+          wc -l heap_disasm.txt
       - name: Summary
         if: always()
         run: |
@@ -149,6 +157,7 @@ jobs:
           name: bt3-ios-link
           path: |
             link.log
+            heap_disasm.txt
             port/build/ios/stubs.txt
             port/build/ios/bt3.map
       - uses: actions/upload-artifact@v4

@@ -723,6 +723,13 @@ void *Port_Malloc(uint32_t size) {
         exit(2);
     }
     sHeapNext = p + size;
+    {   /* diagnostic (iOS bring-up): the first calls, to see what gHeapStart will hold */
+        static int sLogged;
+        if (sLogged < 6) {
+            sLogged++;
+            fprintf(stderr, "bt3 malloc: size 0x%X -> offset 0x%X, host %p (heap next 0x%X, end 0x%X)\n", size, p, Port_A2P(p), sHeapNext, sHeapEnd);
+        }
+    }
     return Port_A2P(p);
 }
 
