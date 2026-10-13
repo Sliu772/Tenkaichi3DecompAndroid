@@ -15,3 +15,8 @@ int bump(struct N * __ptr32 __uptr p) { return __atomic_fetch_add(&p->v, 1, __AT
 int cmpx(struct N * __ptr32 __uptr p) { int e = 6; return __atomic_compare_exchange_n(&p->v, &e, 99, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST); }
 int callf(int (* __ptr32 __uptr f)(int), int x) { return f(x); }
 int (* __ptr32 __uptr fnptr(void))(int) { return gFn; }
+int gArr[64];
+extern int portSum(void *p, int n);                 /* a port function: an ordinary 64-bit pointer */
+int kport(void) { int * __ptr32 __uptr q = &gArr[24]; return portSum((void *)q, 4); }
+int kport2(int * __ptr32 __uptr q) { return portSum((void *)(q + 2), 4); }
+void kset(void) { *(volatile int * __ptr32 __uptr)&gArr[24] = 77; }

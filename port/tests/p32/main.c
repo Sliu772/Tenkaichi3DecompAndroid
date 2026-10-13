@@ -9,7 +9,7 @@ extern struct N n1, n2;
 extern uint32_t gHead;
 unsigned sum(unsigned p); void setv(unsigned p, int v); unsigned head(void); unsigned addr(void);
 void fill(unsigned p); unsigned bump(unsigned p); int callf(unsigned f, int x); unsigned fnptr(void);
-int cmpx(unsigned p); void initfn(void);
+int cmpx(unsigned p); int kport(void); int kport2(unsigned q); void kset(void); extern int gArr[64]; void initfn(void);
 #define OFF(p) ((unsigned)((char *)(p) - bt3_hdr))
 #define PTR(o) ((void *)(bt3_hdr + (o)))
 static int fails;
@@ -31,6 +31,11 @@ int main(void) {
     CHECK(bump(OFF(a)) == 5 && a->v == 6);            /* atomicrmw */
     CHECK(cmpx(OFF(a)) == 1 && a->v == 99);           /* cmpxchg */
     initfn(); CHECK(callf(fnptr(), 21) == 42);                  /* call through a 4-byte function pointer */
+    gArr[24] = 1; gArr[25] = 2; gArr[26] = 3; gArr[27] = 4; gArr[28] = 5; gArr[29] = 6;
+    CHECK(kport() == 10);                             /* constant 4-byte pointer passed to an ordinary-pointer function */
+    CHECK(kport2(OFF(&gArr[24])) == 18);              /* computed one */
+    kset(); CHECK(gArr[24] == 77);
     printf(fails ? "P32 TEST FAILED\n" : "P32 TEST OK\n");
     return fails != 0;
 }
+int portSum(void *p, int n) { int s = 0; for (int i = 0; i < n; i++) s += ((int *)p)[i]; return s; }

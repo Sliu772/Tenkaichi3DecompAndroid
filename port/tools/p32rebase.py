@@ -56,11 +56,44 @@ def rel(x, anchor):
 
 
 CASTC = "addrspacecast (ptr "
-TOP = " to ptr addrspace(271))"
+UPC = "addrspacecast (ptr addrspace(271) "     # constant 4-byte -> ordinary pointer
+_GEP271 = re.compile(r'^getelementptr(?: inbounds| nuw| nusw)* \(i8, ptr addrspace\(271\) addrspacecast \(ptr (.*) to ptr addrspace\(271\)\), i(?:32|64) (-?\d+)\)$', re.S)
+_INTTOPTR = re.compile(r'^inttoptr \(i(?:32|64) (-?\d+) to ptr addrspace\(271\)\)$')
+
+
+def fold_up(line, anchor):
+    """Constant `addrspacecast (ptr addrspace(271) C to ptr)` (a 4-byte pointer constant used as an ordinary one, e.g. an
+    argument of a call into the port): when C is the 4-byte form of a symbol (+ offset), the result is that symbol's own
+    address; a plain integer N is  @hdr + N."""
+    out, pos = [], 0
+    while True:
+        k = line.find(UPC, pos)
+        if k < 0:
+            break
+        end = balanced_end(line, k + len("addrspacecast "))
+        inner = line[k + len(UPC):end - 1]
+        assert inner.endswith(" to ptr"), inner
+        c = inner[:-len(" to ptr")]
+        m = _GEP271.match(c)
+        if c.startswith(CASTC) and c.endswith(" to ptr addrspace(271))") and balanced_end(c, len("addrspacecast ")) == len(c):
+            rep = c[len(CASTC):-len(" to ptr addrspace(271)")]                            # &sym
+            out.append(line[pos:k] + rep)
+        elif m:
+            out.append(line[pos:k] + f"getelementptr inbounds (i8, ptr {m.group(1)}, i64 {m.group(2)})")
+        else:
+            m = _INTTOPTR.match(c)
+            if m:
+                out.append(line[pos:k] + f"getelementptr (i8, ptr @{anchor}, i64 {int(m.group(1)) & 0xffffffff})")
+            else:  # any other constant: hdr + zext(its 32-bit value)
+                out.append(line[pos:k] + f"getelementptr (i8, ptr @{anchor}, i64 zext (i32 ptrtoint (ptr addrspace(271) {c} to i32) to i64))")
+        pos = end
+    return "".join(out) + line[pos:]
 
 
 def fold_consts(line, anchor):
     """`addrspacecast (ptr X to ptr addrspace(271))` -> `inttoptr (i32 <offset of X> to ptr addrspace(271))`."""
+    if UPC in line:
+        line = fold_up(line, anchor)
     out, pos = [], 0
     while True:
         k = line.find(CASTC, pos)
@@ -68,7 +101,10 @@ def fold_consts(line, anchor):
             break
         end = balanced_end(line, k + len("addrspacecast "))
         inner = line[k + len(CASTC):end - 1]           # "X to ptr addrspace(271)"
-        assert inner.endswith(" to ptr addrspace(271)"), inner
+        if inner.startswith("addrspace(") or not inner.endswith(" to ptr addrspace(271)"):
+            out.append(line[pos:k + len(CASTC)])        # not a 4-byte cast we know: keep looking inside
+            pos = k + len(CASTC)
+            continue
         x = inner[:-len(" to ptr addrspace(271)")]
         out.append(line[pos:k] + f"inttoptr (i32 {rel(x, anchor)} to ptr addrspace(271))")
         pos = end

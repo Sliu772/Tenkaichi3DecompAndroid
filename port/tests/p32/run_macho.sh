@@ -24,7 +24,7 @@ PY
 "$LLVM/bin/llc" -O2 -filetype=asm -relocation-model=pic "$T/t2.ll" -o "$T/t.s"
 echo "--- sum() as arm64 (the loop should load through [x, w, uxtw]):"
 awk '/^_sum:/,/\.cfi_endproc/' "$T/t.s" | grep -vE '^\s*\.' | head -20
-echo 'void main(void){}' > "$T/m.c"; "$LLVM/bin/clang" --target=arm64-apple-ios15.0 -c "$T/m.c" -o "$T/m.o" -w
+printf 'void main(void){}\nint portSum(void *p, int n){return 0;}\n' > "$T/m.c"; "$LLVM/bin/clang" --target=arm64-apple-ios15.0 -c "$T/m.c" -o "$T/m.o" -w
 "$LLD" -arch arm64 -platform_version ios 15.0 17.5 -e _main -o "$T/out" "$T/t.o" "$T/m.o"
 OBJDUMP=$LLVM/bin/llvm-objdump; [ -x "$OBJDUMP" ] || OBJDUMP=llvm-objdump
 SYMS=$("$OBJDUMP" --syms "$T/out")
