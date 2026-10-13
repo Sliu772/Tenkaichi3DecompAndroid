@@ -960,7 +960,7 @@ s32 EftBill_SetType(EftZTask *task, s32 type) {
 EftZTask *EftGndDust_Create(EftGndDustArg *arg, s32 kind) {
     EftZTask *task = NULL;
 
-    if (gEftGndDust == NULL) {
+    if (gEftGndDust == NULL || gEftGndDustList == NULL) {
         return NULL;
     }
     switch (kind) {
@@ -1037,6 +1037,9 @@ void EftGndDust_SetSlide(s32 objId, s32 stop, f32 bright) {
         }
     }
     w = gEftGndDust->slide[objId]->work;
+    if (w == NULL) {
+        return; /* the task has no work block: nothing to flag (it would write to the image header on iOS) */
+    }
     switch (stop) {
     case 0:
         w->flags |= EFT_GDUST_EMIT;
@@ -1086,6 +1089,9 @@ void EftGndDust_SetDash(s32 objId, s32 stop, f32 bright) {
         }
     }
     w = gEftGndDust->dash[objId]->work;
+    if (w == NULL) {
+        return;
+    }
     switch (stop) {
     case 0:
         w->flags |= EFT_GDUST_EMIT;
