@@ -1277,13 +1277,20 @@ void BtlTaskList_CreateRoot(u32 count, u32 workSize) {
 
 /* Gives a task a child list of `count` tasks with `workSize` bytes of work each. */
 BtlTaskList *BtlTask_CreateChildList(BtlTask *task, u32 count, u32 workSize) {
-    return task->child = BtlTaskList_Create(task, count, workSize);
+    BtlTaskList *list = BtlTaskList_Create(task, count, workSize);
+
+    /* Not `return task->child = ...`: on iOS the value of that assignment comes back as the low 32 bits of the host
+       address (off by the image slide), while the stored field is right. */
+    task->child = list;
+    return list;
 }
 
 /* The same for the task being updated; returns the list. No caller. */
 BtlTaskList *BtlTask_CreateChildListCur(u32 count, u32 workSize) {
-    gBtlTaskCur->child = BtlTaskList_Create(gBtlTaskCur, count, workSize);
-    return gBtlTaskCur->child;
+    BtlTaskList *list = BtlTaskList_Create(gBtlTaskCur, count, workSize);
+
+    gBtlTaskCur->child = list;
+    return list;
 }
 
 /* Allocates a list, its tasks and their work blocks from the current battle pool. NULL when the parent already

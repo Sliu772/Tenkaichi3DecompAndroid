@@ -1569,12 +1569,17 @@ void EftGfx_DrawPolyAvgZ(EftGfxVert *verts, s32 arg1, s32 arg2, s32 arg3, s32 fl
     /* The triangle is clipped in place and can grow to eight corners, but callers hand over room for three. On
        the PS2 the extra corners land in the caller's other locals; on PC they reach the return address (the
        crash in EftRibbon_DrawStrip). The work is done on a copy with room. */
-    EftGfxVert portPoly[16];
+    static EftGfxVert portPoly[16]; /* static: the address of a stack array reached clip_project as a raw offset on iOS */
     __builtin_memcpy(portPoly, verts, 3 * sizeof(EftGfxVert));
     verts = portPoly;
 #endif
+#ifdef PORT
+    static EftGfxScr scr[9];
+    static EftVec col[9];
+#else
     EftGfxScr scr[9];
     EftVec col[9];
+#endif
     EftVec *plane;
     s32 count = 3;
     s32 i;
@@ -1605,12 +1610,17 @@ void EftGfx_DrawPolyFixedZ(EftGfxVert *verts, s32 arg1, s32 arg2, s32 arg3, s32 
     /* The triangle is clipped in place and can grow to eight corners, but callers hand over room for three. On
        the PS2 the extra corners land in the caller's other locals; on PC they reach the return address (the
        crash in EftRibbon_DrawStrip). The work is done on a copy with room. */
-    EftGfxVert portPoly[16];
+    static EftGfxVert portPoly[16]; /* static: the address of a stack array reached clip_project as a raw offset on iOS */
     __builtin_memcpy(portPoly, verts, 3 * sizeof(EftGfxVert));
     verts = portPoly;
 #endif
+#ifdef PORT
+    static EftGfxScr scr[9];
+    static EftVec col[9];
+#else
     EftGfxScr scr[9];
     EftVec col[9];
+#endif
     EftVec *plane;
     s32 count = 3;
     s32 i;
@@ -1641,12 +1651,17 @@ void EftGfx_DrawPolyAvgZFront(EftGfxVert *verts, s32 arg1, s32 arg2, s32 arg3, s
     /* The triangle is clipped in place and can grow to eight corners, but callers hand over room for three. On
        the PS2 the extra corners land in the caller's other locals; on PC they reach the return address (the
        crash in EftRibbon_DrawStrip). The work is done on a copy with room. */
-    EftGfxVert portPoly[16];
+    static EftGfxVert portPoly[16]; /* static: the address of a stack array reached clip_project as a raw offset on iOS */
     __builtin_memcpy(portPoly, verts, 3 * sizeof(EftGfxVert));
     verts = portPoly;
 #endif
+#ifdef PORT
+    static EftGfxScr scr[9];
+    static EftVec col[9];
+#else
     EftGfxScr scr[9];
     EftVec col[9];
+#endif
     EftVec *plane;
     s32 count = 3;
     s32 i;
@@ -1679,12 +1694,17 @@ void EftGfx_DrawPolyScaledZ(EftGfxVert *verts, s32 arg1, s32 arg2, s32 arg3, s32
     /* The triangle is clipped in place and can grow to eight corners, but callers hand over room for three. On
        the PS2 the extra corners land in the caller's other locals; on PC they reach the return address (the
        crash in EftRibbon_DrawStrip). The work is done on a copy with room. */
-    EftGfxVert portPoly[16];
+    static EftGfxVert portPoly[16]; /* static: the address of a stack array reached clip_project as a raw offset on iOS */
     __builtin_memcpy(portPoly, verts, 3 * sizeof(EftGfxVert));
     verts = portPoly;
 #endif
+#ifdef PORT
+    static EftGfxScr scr[9];
+    static EftVec col[9];
+#else
     EftGfxScr scr[9];
     EftVec col[9];
+#endif
     EftVec *plane;
     s32 count = 3;
     s32 i;

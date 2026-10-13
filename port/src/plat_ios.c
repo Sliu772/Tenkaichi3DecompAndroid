@@ -104,7 +104,7 @@ void *Ios_MapWindow(uint64_t size) {
       mismatches (an offset where a host pointer belongs), healed on the spot and logged with its call chain.
    2. Any other fault inside the game's code is logged and its instruction skipped ("SKIP"); a load leaves its
       register as it was.
-   Gives up (full dump) after 5000 recoveries in total or 200 at the same pc. Only the first 3 per pc are logged. */
+   Gives up (full dump) after 20000 recoveries in total or 3000 at the same pc. Only the first 3 per pc are logged. */
 static int skip_fault(int sig, siginfo_t *si, ucontext_t *uc) {
     static int total;
     static uintptr_t seen[256];
@@ -118,7 +118,7 @@ static int skip_fault(int sig, siginfo_t *si, ucontext_t *uc) {
     uint64_t fa = (uint64_t)(uintptr_t)si->si_addr;
     int i, k, fixed = 0, loud;
 
-    if ((sig != SIGSEGV && sig != SIGBUS) || pc < lo || pc >= hi || total >= 5000) {
+    if ((sig != SIGSEGV && sig != SIGBUS) || pc < lo || pc >= hi || total >= 20000) {
         return 0;
     }
     for (i = 0; i < 256 && seen[i] != 0 && seen[i] != pc; i++) {
@@ -127,7 +127,7 @@ static int skip_fault(int sig, siginfo_t *si, ucontext_t *uc) {
         return 0;
     }
     seen[i] = pc;
-    if (++cnt[i] > 200) {
+    if (++cnt[i] > 3000) {
         return 0;
     }
     total++;
