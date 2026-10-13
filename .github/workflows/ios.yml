@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/ios.yml"
       - "port/tools/**"
+      - "port/ios/**"
       - "port/src/**"
       - "src/**"
       - "include/**"
@@ -86,6 +87,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: engine-compile-log, path: compile.log }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-objs
+          retention-days: 1
+          path: |
+            port/build/ios/obj
+            port/build/ios/obj_data
       - name: Collect the IR of the files that failed
         if: always()
         run: |
@@ -98,3 +106,43 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: failed-ll, path: failed-ll, if-no-files-found: ignore }
+
+  # Step 2: link the objects into the Mach-O executable and package an unsigned .ipa (Sideloadly / SideStore sign it).
+  # The first run on a device only has to leave bt3_log.txt in the app's Documents folder (Files app > On My iPhone > BT3).
+  link-ipa:
+    needs: [build-sdl3, engine-compile]
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: SDL3-xcframework-ios, path: SDL3.xcframework }
+      - uses: actions/download-artifact@v4
+        with: { name: engine-objs, path: port/build/ios }
+      - name: Link
+        run: |
+          set -o pipefail
+          export BT3_SYSROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
+          export BT3_SDL3_XCF="$PWD/SDL3.xcframework"
+          find "$BT3_SDL3_XCF" -maxdepth 2 | head -20
+          python3 port/tools/ios_link.py 2>&1 | tee link.log
+      - name: Package
+        run: sh port/tools/ios_package.sh "$PWD/SDL3.xcframework"
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '### iOS link'; echo '```'; head -60 link.log || true; echo '```'
+            echo; echo 'Symbols still stubbed (what is left to port):'; echo '```'
+            wc -l < port/build/ios/stubs.txt || true; head -150 port/build/ios/stubs.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bt3-ios-link
+          path: |
+            link.log
+            port/build/ios/stubs.txt
+            port/build/ios/bt3.map
+      - uses: actions/upload-artifact@v4
+        with: { name: bt3-ipa, path: port/build/ios/bt3.ipa }

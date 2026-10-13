@@ -116,10 +116,17 @@ def compile_ee(cmd, src, o, game_text=True):
     return r
 
 
+# iOS: ld64 has no --wrap, so what the other platforms wrap is renamed when the source is preprocessed. The game's own
+# main() becomes __real_main (port/src/plat_ios.c has the real one); src/main.c calls __wrap_Progress_Main (port/src/
+# headless.c) directly, and the definition in the menu overlay becomes __real_Progress_Main, which the wrapper calls.
+IOS_RENAMES = {"main.c": ["-Dmain=__real_main", "-DProgress_Main=__wrap_Progress_Main"],
+               "menu_a_b.c": ["-DProgress_Main=__real_Progress_Main"]}
+
+
 def game_source(f):
     o = OBJ / (str(f.relative_to(ROOT / "src")).replace("/", "_")[:-2] + ".o")
     src, done, missing = portsrc.prepare(f)
-    r = compile_ee(GAME + [f"-I{f.parent}"], src, o)
+    r = compile_ee(GAME + [f"-I{f.parent}"] + (IOS_RENAMES.get(f.name, []) if IOS else []), src, o)
     return (o if r.returncode == 0 else None), f.name, r.stderr
 
 
@@ -137,7 +144,7 @@ HARD = [CLANG] + TARGET + ["-c", "-O2", "-g1", "-fPIE", "-fno-strict-aliasing", 
 def port_source(f):
     o = OBJ / ("pc_" + f.stem + ".o")
     names = ["-include", "vu0_names.h", "-DREF_VU0_EXTERN_ARITH"] if f.parent.name == "port" and f.parent.parent.name == "src" else []
-    hard = f.name in ("plat_libm.c", "plat_fastvec.c")
+    hard = f.name in ("plat_libm.c", "plat_fastvec.c", "plat_ios.c")
     cmd = [CLANG] + TARGET + ["-std=gnu99", "-c", "-O2", "-g1", "-fPIE", "-fno-strict-aliasing", "-ffp-contract=off", "-fno-builtin", "-w",
                               "-fms-extensions", *PLAT_DEF, "-Iinclude", "-Iport/include", "-Iport/src", f"-I{SDL3 / 'include'}"]
     if not hard:
@@ -200,7 +207,7 @@ def compile_all():
     jobs = []
     jobs += [(game_source, f) for f in portsrc.sources()]
     jobs += [(newlib_source, f) for f in sorted((ROOT / "port/third_party/newlib_libm").glob("*.c"))]
-    jobs += [(port_source, f) for f in [ROOT / "src/port/vu0_a.c", ROOT / "src/port/vu0_b.c"] + sorted((ROOT / "port/src").glob("*.c"))]
+    jobs += [(port_source, f) for f in [ROOT / "src/port/vu0_a.c", ROOT / "src/port/vu0_b.c"] + [f for f in sorted((ROOT / "port/src").glob("*.c")) if IOS or f.name != "plat_ios.c"]]
     jobs += [(gs_source, f) for f in sorted((ROOT / "port/src/gs").glob("*.c")) if not (IOS and f.name == "gs_gl.c")]  # (iOS: Vulkan through MoltenVK only)
     jobs += [(cxx_source, f) for f in sorted((ROOT / "port/third_party/imgui").glob("*.cpp")) + sorted((ROOT / "port/src/gs").glob("*.cpp"))]
     only = os.environ.get("BT3_ONLY")  # a few files: BT3_ONLY=btl_obj,plat_mem
@@ -572,7 +579,9 @@ def main():
     if "compile" in args:
         ok = compile_all()
     if IOS and any(a in args for a in ("link", "loader", "install")):
-        print("iOS: only \"compile\" is done so far (the Mach-O link comes next)")
+        if "link" in args and ok:  # (loader / install are Android's: an iOS app is packaged by port/tools/ios_package.sh)
+            import ios_link
+            sys.exit(ios_link.main())
         sys.exit(0 if ok else 1)
     if "link" in args and (ok or os.environ.get("BT3_LINK_ANYWAY")):
         ok = link()
