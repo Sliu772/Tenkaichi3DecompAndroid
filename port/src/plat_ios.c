@@ -105,7 +105,8 @@ void *Ios_MapWindow(uint64_t size) {
       mismatches (an offset where a host pointer belongs), healed on the spot and logged with its call chain.
    2. Any other fault inside the game's code is logged and its instruction skipped ("SKIP"); a load leaves its
       register as it was.
-   Gives up (full dump) after 20000 recoveries in total or 3000 at the same pc. Only the first 3 per pc are logged. */
+   Gives up (full dump) after 20000 SKIPs in total or 3000 at the same pc (FIXRAW has its own budget: 5 million per pc).
+   Only the first 3 per pc are logged. */
 static int skip_fault(int sig, siginfo_t *si, ucontext_t *uc) {
     static int total;
     static uintptr_t seen[256];
@@ -128,11 +129,6 @@ static int skip_fault(int sig, siginfo_t *si, ucontext_t *uc) {
         return 0;
     }
     seen[i] = pc;
-    if (++cnt[i] > 3000) {
-        return 0;
-    }
-    total++;
-    loud = cnt[i] <= 3;
     if (fa < 0x100000000ULL) {
         for (k = 0; k < 29; k++) {
             uint64_t r = ss->__x[k];
@@ -141,6 +137,22 @@ static int skip_fault(int sig, siginfo_t *si, ucontext_t *uc) {
                 fixed++;
             }
         }
+    }
+    if (fixed) {
+        /* A healed fault is not a failure: the same call site hands over a raw offset on every call (once per
+           polygon in clip_project), so it has its own, much larger budget and does not use up the SKIP budget. */
+        static unsigned fixcnt[256];
+
+        if (++fixcnt[i] > 5000000U) {
+            return 0;
+        }
+        loud = fixcnt[i] <= 3;
+    } else {
+        if (++cnt[i] > 3000) {
+            return 0;
+        }
+        total++;
+        loud = cnt[i] <= 3;
     }
     if (loud) {
         fprintf(stderr, "bt3 %s #%d: signal %d addr %p pc offset 0x%llx lr offset 0x%llx chain:", fixed ? "FIXRAW" : "SKIP", total,
