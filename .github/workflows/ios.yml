@@ -71,6 +71,7 @@ jobs:
           export BT3_SDL3="$PWD/SDL3"
           export BT3_SKELETON=1
           export BT3_JOBS="$(sysctl -n hw.ncpu)"
+          export BT3_KEEP=1   # keep the .ll files (raw clang IR and the final one) for the IR diagnostics below
           python3 port/tools/android.py compile 2>&1 | tee compile.log
       - name: Summary
         if: always()
@@ -94,6 +95,32 @@ jobs:
           path: |
             port/build/ios/obj
             port/build/ios/obj_data
+            !port/build/ios/obj/*.ll
+            !port/build/ios/obj/*.i
+      - name: IR of the memory card callbacks (before and after p32rebase)
+        if: always()
+        run: |
+          mkdir -p ir
+          cp port/build/ios/obj/*menu_i_b*.ll ir/ 2>/dev/null || true
+          {
+            echo "== BootCard_Init, raw clang IR =="
+            awk '/^define .*@BootCard_Init\(/ {p=1} p {print} p && /^}/ {exit}' port/build/ios/obj/menu_menu_i_b.raw.ll
+            echo; echo "== BootCard_Init, after irfix + p32rebase =="
+            awk '/^define .*@BootCard_Init\(/ {p=1} p {print} p && /^}/ {exit}' port/build/ios/obj/menu_menu_i_b.ll
+            echo; echo "== declaration of McFlow_SetDoneCb =="
+            grep -hE '(declare|define) .*@McFlow_SetDoneCb' port/build/ios/obj/menu_menu_i_b.raw.ll
+          } > ir/bootcard_ir.txt 2>&1 || true
+          # every function address that is still an absolute address in the final IR (what BootCard_Init suffered from)
+          { grep -HnE 'ptrtoint \(ptr @[A-Za-z_][A-Za-z0-9_.$]* to i(32|64)\)' port/build/ios/obj/*.ll \
+              | grep -v '\.raw\.ll' | grep -v '_mh_execute_header' | grep -v 'sub (i64\|i64 sub' ; } > ir/suspect_absolute_addresses.txt 2>&1 || true
+          { grep -HnE 'addrspacecast \(ptr @' port/build/ios/obj/*.ll | grep -v '\.raw\.ll' ; } > ir/leftover_addrspacecast.txt 2>&1 || true
+          wc -l ir/*.txt
+          { echo '### IR diagnostics'; echo '```'; head -80 ir/bootcard_ir.txt; echo '```'
+            echo; echo "Suspect absolute addresses: $(wc -l < ir/suspect_absolute_addresses.txt)"
+            echo "Leftover addrspacecast of a symbol: $(wc -l < ir/leftover_addrspacecast.txt)"; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: bt3-ir, path: ir, if-no-files-found: ignore }
       - name: Collect the IR of the files that failed
         if: always()
         run: |
