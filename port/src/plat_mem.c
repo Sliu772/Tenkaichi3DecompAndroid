@@ -345,9 +345,13 @@ static void game_main(void) {
     sResult = __real_main(sArgc, NULL);
 }
 
+static void Port_LoadGameData(void);
+
 int __wrap_main(int argc, char **argv) {
     sArgc = argc;
     (void)argv;
+    gPortStage = "reading the game's programs from gamedata";
+    Port_LoadGameData(); /* (plat_ios.c has installed the data from the .iso by now) */
     Port_CallOnStack(game_main, ios_window() + IOS_WIN_SIZE); /* (16-byte aligned: the block is) */
     return sResult;
 }
@@ -640,8 +644,12 @@ __attribute__((constructor)) static void Port_MapMemory(void) {
         ExitProcess(4);
     }
 #endif
+#ifndef __APPLE__
     gPortStage = "reading the game's programs from gamedata";
     Port_LoadGameData();
+#endif
+    /* (iOS: not here. This runs before main(), when the app cannot yet show anything or install the game's data from
+       the user's .iso (plat_ios.c ios_prepare_data); __wrap_main reads the programs once that is done.) */
     gPortStage = "reserving the game's memory";
 #if PORT_LP64 && !defined(_WIN32)
 #ifndef __ANDROID__

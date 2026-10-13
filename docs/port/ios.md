@@ -33,7 +33,8 @@ Branch `ios-prototype`, CI `.github/workflows/ios.yml` (jobs: abi-check, build-s
    (SDL_RenderDebugText). `gamedata/.installing` marks a copy that was cut short (it is redone); a finished one leaves
    `gamedata/.installed`. Errors (no ISO, not an ISO, other release, no space) stay on the screen and in `bt3_log.txt`.
    Tested on Linux with a synthetic ISO (files past 4 GB included); the SDL screen is unverified on a device.
-   Not done: .bin/.cue images (convert to .iso), checking the hash at install time (the engine does it at start).
+   The game's programs are read in `__wrap_main` (after the install), not in `plat_mem.c`'s constructor, which runs before
+   `main()` and could only exit with "the game's program was not found". Not done: .bin/.cue images (convert to .iso), checking the hash at install time (the engine does it at start).
 2. `stubs.txt` still lists the `func_00xxxxxx` entries of the data tables and `dvCi*` (the same stubs as Android) and the
    `gl*` calls of anything that still reaches OpenGL; check it after each run.
 3. State save/restore (`gs/state.c`) and the net rollback still assume PS2 addresses for their regions: not looked at yet.

@@ -277,3 +277,8 @@ void ADXERR_EntryErrFunc(void (*func)(void *obj, char *msg), void *obj) { (void)
 /* The drive: a PS2 DVD is always present and idle (sceCdGetDiskTypeSafe 0x14 = PS2 DVD, sceCdStatus 10 = paused). */
 int sceCdGetDiskTypeSafe(void) { return 0x14; }
 int sceCdStatus(void) { return 10; }
+/* Disc_Identify (src/sys/file.c) looks for each game's boot file on the disc; the disc here is always this game's (SLUS_216.78). */
+int sceCdSearchFile(void *file, const char *name) {
+    (void)file;
+    return name != NULL && strstr(name, "216.78") != NULL;
+}
