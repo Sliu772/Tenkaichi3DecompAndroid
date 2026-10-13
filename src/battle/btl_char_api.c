@@ -37,7 +37,7 @@ extern f32 Vec3_Dist(Vec4 *a, Vec4 *b);              /* distance between two poi
 
 extern f32 BtlAnim_GetFrame(BtlCharApiChr *chr);            /* BtlObj_Get(chr->objId)->unkC78 */
 extern s32 BtlAnim_GetId(BtlCharApiChr *chr);            /* chr->unk974 */
-extern void *BtlAnim_GetFlags(s32 idx);                     /* gBtlChars->unk20[idx], idx < 0x19E */
+extern u32 BtlAnim_GetFlags(u32 idx);                     /* gBtlChars->unk20[idx], idx < 0x19E */
 extern s32 BtlAnim_TestAttr(BtlCharApiChr *chr, u64 mask);  /* 0 while chr->unk990 > 0, else BtlObjAnim_TestEvent on its object */
 extern void ChrCam_AddShake(BtlCharApiChr *chr, f32 a, f32 b); /* CamShake_Add(&chr->camShake, a, b) if chr->camShakeOn */
 extern s32 ChrCam_IsCutActive(BtlCharApiChr *chr);
@@ -566,7 +566,7 @@ void *BtlCharApi_GetUnk974Data(s32 objId) {
     BtlCharApiChr *chr = BtlChar_FindByObjId(objId);
 
     if (chr != NULL) {
-        return BtlAnim_GetFlags(BtlAnim_GetId(chr));
+        return (void *)BtlAnim_GetFlags(BtlAnim_GetId(chr));
     }
     return NULL;
 }

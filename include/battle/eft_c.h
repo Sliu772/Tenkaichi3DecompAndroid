@@ -77,8 +77,8 @@ typedef struct EftGeyserView {
     /* 0xB0 */ f32 unkB0; /* size or strength; scales both emitters */
     /* 0xB4 */ f32 unkB4;
     /* 0xB8 */ u8 unkB8[0x34];
-    /* 0xEC */ s32 smoke; /* emitter task from EftSmoke_Create */
-    /* 0xF0 */ s32 steam; /* emitter task from EftSteam_Create */
+    /* 0xEC */ void *smoke; /* emitter task from EftSmoke_Create */
+    /* 0xF0 */ void *steam; /* emitter task from EftSteam_Create */
 } EftGeyserView;
 
 /* Argument of EftSmoke_Create. */
@@ -362,8 +362,8 @@ extern EftWeather *gEftWeather;
 extern EftStage *gEftStage;
 extern EftSurf *gEftSurf;
 
-s32 EftGeyser_GetSmokePos(EftTask *task);
-s32 EftGeyser_GetSteamWork(EftTask *task);
+void *EftGeyser_GetSmokePos(EftTask *task);
+void *EftGeyser_GetSteamWork(EftTask *task);
 void EftGeyser_StartSmoke(EftTask *task);
 void EftGeyser_StartSteam(EftTask *task);
 

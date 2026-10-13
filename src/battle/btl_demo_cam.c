@@ -20,9 +20,10 @@ extern void Mtx_RotateY(Mtx44 *dst, Mtx44 *src, f32 angle); /* rotate about Y */
 extern void Vu0View_LoadMtx(Mtx44 *m);
 
 extern void *BtlObj_Get(s32 id);
-extern void *BtlCharApi_GetPlayer(void *arg);
-extern s32 BtlCharApi_HasMemberUnk70(void *arg);
-extern void BtlCharApi_GetCamUnk460(void *arg, Vec4 *out);
+/* Fighter ids are ints (a void * here became header+id on iOS). */
+extern s32 BtlCharApi_GetPlayer(s32 objId);
+extern s32 BtlCharApi_HasMemberUnk70(s32 objId);
+extern void BtlCharApi_GetCamUnk460(s32 objId, Vec4 *out);
 extern s32 BtlStage_IsReady(void);
 extern DemoCamAnim *BtlStage_GetFileMember(s32 idx);          /* the stage's camera animation idx (0..2) */
 extern u8 *BtlObj_GetNode(void *obj, s32 arg);
@@ -249,7 +250,7 @@ s32 DemoCam_Update(void) {
         } else {
             owner = gDemoCam->chr;
         }
-        if (owner != NULL && BtlCharApi_HasMemberUnk70(BtlCharApi_GetPlayer(*(void **)((u8 *)owner + 0x10))) != 0 &&
+        if (owner != NULL && BtlCharApi_HasMemberUnk70(BtlCharApi_GetPlayer(*(s32 *)((u8 *)owner + 0x10))) != 0 &&
             gDemoCam->scaleHeight != 0) {
             f32 scale = (*(f32 **)((u8 *)owner + 0x91C))[1] / 1.1f;
 
@@ -269,9 +270,9 @@ s32 DemoCam_Update(void) {
             if (BtlStage_IsReady() != 0) {
                 Vec4_Copy(&from, (Vec4 *)inv.m[3]);
                 if (gDemoCam->obj != NULL) {
-                    BtlCharApi_GetCamUnk460(*(void **)((u8 *)gDemoCam->obj + 0x10), &to);
+                    BtlCharApi_GetCamUnk460(*(s32 *)((u8 *)gDemoCam->obj + 0x10), &to);
                 } else {
-                    BtlCharApi_GetCamUnk460(*(void **)((u8 *)gDemoCam->chr + 0x10), &to);
+                    BtlCharApi_GetCamUnk460(*(s32 *)((u8 *)gDemoCam->chr + 0x10), &to);
                 }
                 if (BtlCam_TraceStage(&hit, &from, &to, &frac, NULL) != 0) {
                     Vec4_Copy((Vec4 *)inv.m[3], &hit);

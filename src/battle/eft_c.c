@@ -78,11 +78,12 @@ extern void EftPrim_DrawQuadDepth(Vec4 *pos, Vec4 *color, f32 w, f32 h, f32 u0, 
 
 /* The geyser (eft_b.c) and the emitters it starts (eft_g.c smoke, eft_e.c steam). */
 extern void EftGeyser_Update(EftTask *task);
-extern s32 EftSmoke_Create(EftGeyserSmokeArg *arg);
-extern s32 EftSmoke_GetPos(s32 handle);
-extern s32 EftSteam_Create(EftGeyserSteamArg *arg);
-extern void EftSteam_SetPaused(s32 handle, s32 on);
-extern s32 EftSteam_GetWork(s32 handle);
+/* Emitter handles are pointers (as s32 they lost the upper half of the address on iOS). */
+extern void *EftSmoke_Create(EftGeyserSmokeArg *arg);
+extern void *EftSmoke_GetPos(void *handle);
+extern void *EftSteam_Create(EftGeyserSteamArg *arg);
+extern void EftSteam_SetPaused(void *handle, s32 on);
+extern void *EftSteam_GetWork(void *handle);
 
 extern void EftGndDust_InitTemplate(void);
 
@@ -134,8 +135,8 @@ static inline u8 EftTask_IsDead(EftTask *task) {
 }
 
 /* Returns EftSmoke_GetPos of a live geyser's smoke emitter, 0 when the task is not a geyser or has none. */
-s32 EftGeyser_GetSmokePos(EftTask *task) {
-    s32 fx;
+void *EftGeyser_GetSmokePos(EftTask *task) {
+    void *fx;
 
     if (task == NULL) {
         return 0;
@@ -147,15 +148,15 @@ s32 EftGeyser_GetSmokePos(EftTask *task) {
         return 0;
     }
     fx = ((EftGeyserView *)task->work)->smoke;
-    if (fx == 0) {
-        return 0;
+    if (fx == NULL) {
+        return NULL;
     }
     return EftSmoke_GetPos(fx);
 }
 
 /* Returns EftSteam_GetWork of a live geyser's steam emitter, 0 when the task is not a geyser or has none. */
-s32 EftGeyser_GetSteamWork(EftTask *task) {
-    s32 fx;
+void *EftGeyser_GetSteamWork(EftTask *task) {
+    void *fx;
 
     if (task == NULL) {
         return 0;
@@ -167,8 +168,8 @@ s32 EftGeyser_GetSteamWork(EftTask *task) {
         return 0;
     }
     fx = ((EftGeyserView *)task->work)->steam;
-    if (fx == 0) {
-        return 0;
+    if (fx == NULL) {
+        return NULL;
     }
     return EftSteam_GetWork(fx);
 }

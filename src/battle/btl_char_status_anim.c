@@ -24,7 +24,7 @@ extern void BtlChar_SetHeldFlag(BtlStatChr *chr, s32 flag);
 extern void BtlChar_ClearFlag(BtlStatChr *chr, s32 flag);
 extern s32 BtlChar_TestPrevFlag(BtlStatChr *chr, s32 flag);              /* the flag in the second pair of flag arrays */
 extern void BtlChar_ClearFlagRange(BtlStatChr *chr, s32 first, s32 last);  /* BtlChar_ClearFlag for first..last */
-extern s32 BtlOpp_GetObj(BtlStatChr *chr);                        /* the opponent's battle object (inferred) */
+extern void *BtlOpp_GetObj(BtlStatChr *chr);                        /* the opponent's battle object (inferred) */
 extern s32 BtlCharApi_IsInRushSequence(s32 objId);
 extern void BtlObj_SetSubState(BtlStatObj *obj, s32 state, s32 arg);
 extern void BtlObjAnim_StartBlend(BtlStatObj *obj, f32 blend);            /* starts a blend of `blend` seconds */
@@ -32,7 +32,7 @@ extern void BtlObjAnim_ZeroRootAxes(void *handle, s32 a, s32 b, s32 c);
 extern void BtlObjAnim_RebaseRoot(void *handle);
 extern void BtlObjAnim_ClearNodeRot(void *handle, s32 node);
 extern void BtlObjAnim_Play(BtlStatObj *obj, s32 layer, s32 anim, s32 reset);
-extern void BtlObjAnim_PlayFrom(BtlStatObj *obj, s32 other, s32 anim, s32 arg);
+extern void BtlObjAnim_PlayFrom(BtlStatObj *obj, void *other, s32 anim, s32 arg);
 extern void BtlObjAnim_PromoteLayer(BtlStatObj *obj);                       /* the second layer becomes the main one */
 extern s32 BtlObjAnim_TestEvent(BtlStatObj *obj, u64 mask);              /* attribute test at the current frame */
 extern void BtlObj_SetEyeFrame(BtlStatObj *obj, s32 state);

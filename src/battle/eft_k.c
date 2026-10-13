@@ -2017,8 +2017,7 @@ extern void EftTechEvt_RequestStop(s32 objId);
 #define EftRushShot_CreateModels ((void (*)(EftTask *task))EftRushShot_CreateModels)
 #define EftRushShot_UpdateModels ((void (*)(EftTask *task))EftRushShot_UpdateModels)
 extern void EftFlash_Start(EftFlashArg *arg);
-extern s32 EftStreak_Start(s32 objId, s32 kind, s32 arg2, f32 angle);
-#define EftStreak_Stop ((void (*)(s32 handle))EftStreak_Stop)
+extern void *EftStreak_Start(s32 objId, s32 kind, s32 arg2, f32 angle);
 extern void EftDelaySe_Start(s32 objId, EftSparkTbl *tbl, s32 count);
 extern void EftObj_Destroy(s32 handle);
 #define BtlTask_SetDead ((void (*)(EftTask *task))BtlTask_SetDead)

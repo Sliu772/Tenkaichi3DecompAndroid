@@ -106,7 +106,7 @@ extern s32 BtlChars_IsTimeStopped(void);
 extern f32 BtlCharApi_GetHeight(s32 objId);
 extern s32 BtlCharApi_IsFighter(s32 objId);
 extern s32 BtlCharApi_GetOpponentObjId(s32 objId);
-extern s32 *BtlCharApi_GetPlayerObjUnk58(s32 side);
+extern s32 BtlCharApi_GetPlayerObjUnk58(s32 side); /* the object's word is an offset: cast it */
 extern s32 BtlCharApi_IsHidden(s32 objId);
 extern s32 BtlCharApi_IsFrozen(s32 objId);
 extern s32 BtlCharApi_AnyFrozen(void);
@@ -251,7 +251,7 @@ s32 BtlScene_TestCharPackBit(s32 side, s32 bit) {
 
 /* Returns entry idx of a character's pack (0x2053B0), or NULL when the character has none. */
 s32 *BtlScene_GetCharPackEntry(s32 side, s32 idx) {
-    s32 *base = BtlCharApi_GetPlayerObjUnk58(side);
+    s32 *base = (s32 *)BtlCharApi_GetPlayerObjUnk58(side);
 
     if (base != NULL) {
         return (s32 *)((u8 *)base + ((u32)base[idx] >> 2 << 2));

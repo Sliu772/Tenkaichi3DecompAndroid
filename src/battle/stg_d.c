@@ -25,7 +25,7 @@ extern void Vec4_Sub(Vec4 *dst, Vec4 *a, Vec4 *b);
 extern f32 Vec3_Dot(Vec4 *a, Vec4 *b);
 extern void ColSphere_Set(RigidSphere *out, Vec4 *center, f32 radius);        /* fills a sphere */
 extern s32 ColSphere_TestTri(Vec4 *out, RigidSphere *sphere, StgRigidTri *tri);    /* sphere against triangle: closest point */
-extern void StgCol_CollectSphere(RigidSphere *sphere, s32 hits);                     /* collects the stage triangles near a sphere */
+extern s32 StgCol_CollectSphere(RigidSphere *sphere, void *hits);                     /* collects the stage triangles near a sphere */
 
 extern s32 BtlStage_IsReady(void);
 extern f32 BtlStage_GetInnerRadius(void);
@@ -120,7 +120,7 @@ void StgRigidList_BeginFrame(StgRigidNode *head) {
         }
         if (n->body.user != 0 && BtlStage_IsReady()) {
             ColSphere_Set(&sphere, &n->body.prevSphere.center, n->body.prevSphere.radius + n->body.moved + 0.1f);
-            StgCol_CollectSphere(&sphere, n->body.user);
+            StgCol_CollectSphere(&sphere, (void *)n->body.user);
         }
         n->damp = 0.0015f;
         if (BtlStage_IsReady() && hasWater) {

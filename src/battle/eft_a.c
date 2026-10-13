@@ -46,7 +46,7 @@ extern f32 cosf(f32 x);
 extern f32 atanf(f32 x);
 extern f32 acosf(f32 x);
 extern s32 BtlCharApi_IsLockedOn(s32 objId);
-extern void BtlCharApi_CalcAimDir45(s32 objId, s32 arg, EftVec *out);
+extern void BtlCharApi_CalcAimDir45(s32 objId, EftVec *from, EftVec *out);
 extern void BtlCharApi_GetRot(s32 objId, EftVec *out);
 extern void BtlCharApi_GetFrameMove(s32 objId, EftVec *out);
 extern u8 *gBtlCamView;
@@ -1419,7 +1419,7 @@ void EftGfx_UpdateClipPlanes(void) {
 }
 
 /* Direction a projectile of fighter objId starts in: at the locked target, else straight ahead (yaw only). */
-s32 EftAim_GetDir(EftVec *out, s32 arg, s32 objId) {
+s32 EftAim_GetDir(EftVec *out, EftVec *arg, s32 objId) {
     EftVec rot;
 
     if (BtlCharApi_IsLockedOn(objId)) {
@@ -1439,7 +1439,7 @@ s32 EftAim_GetDir(EftVec *out, s32 arg, s32 objId) {
  * Same for a technique: with definition aimMode != 0 the aim is taken once and kept in src->aimDir; an aim more
  * than 60 degrees off the fighter's facing (flat dot < 0.5) falls back to straight ahead.
  */
-s32 EftAim_GetDirKeep(EftHitSrc *src, EftVec *out, s32 arg, s32 objId) {
+s32 EftAim_GetDirKeep(EftHitSrc *src, EftVec *out, EftVec *arg, s32 objId) {
     EftVec rot;
     EftVec fwd;
     EftVec flat;
