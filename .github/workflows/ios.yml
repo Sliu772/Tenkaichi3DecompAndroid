@@ -142,6 +142,15 @@ jobs:
             echo; echo "== Heap_AllocBlock =="; grep -A160 "^_Heap_AllocBlock:" full_disasm.txt;
             echo; echo "== Port_Malloc =="; grep -A40 "^_Port_Malloc:" full_disasm.txt; } > heap_disasm.txt || true
           wc -l heap_disasm.txt
+      - name: Disassemble the memory card callback path
+        if: always()
+        run: |
+          { for f in BootCard_Init BootCard_OnFlowDone McFlow_SetDoneCb McFlow_CallDone McFlow_UpdateBootLoad McFlow_Update; do
+              echo "== $f =="
+              awk -v s="^_${f}:" '$0 ~ s {p=1; print; next} p && /^_[A-Za-z0-9_.$]+:/ {p=0} p' full_disasm.txt
+              echo
+            done; } > callback_disasm.txt || true
+          wc -l callback_disasm.txt
       - name: Summary
         if: always()
         run: |
@@ -158,6 +167,7 @@ jobs:
           path: |
             link.log
             heap_disasm.txt
+            callback_disasm.txt
             port/build/ios/stubs.txt
             port/build/ios/bt3.map
       - uses: actions/upload-artifact@v4
