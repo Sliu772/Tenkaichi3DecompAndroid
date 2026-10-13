@@ -1,4 +1,7 @@
 #include "common.h"
+#ifdef PORT
+#include <stdio.h>
+#endif
 #include "battle/eft_s.h"
 #include "sys/gfx_ot.h"
 
@@ -1604,6 +1607,10 @@ void EftChainMgr_Init(EftTTask *task) {
     gEftChain->buf = BtlPool_Alloc(BtlPool_GetCurrent(), 0xBB80);
     memset(gEftChain->buf, 0, 0xBB80);
     gEftChainList = BtlTask_CreateChildList(task, 10, sizeof(EftChainWork));
+#ifdef PORT
+    fprintf(stderr, "bt3 chain: EftChainMgr_Init task %p mgr %p buf %p list %p\n", (void *)task, (void *)gEftChain,
+            (void *)gEftChain->buf, gEftChainList);
+#endif
 }
 
 /* Term callback of the manager class. */

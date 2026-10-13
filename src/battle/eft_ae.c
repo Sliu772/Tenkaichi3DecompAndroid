@@ -1373,14 +1373,29 @@ static void BtlTaskList_NullList(const char *what, void *cls, void *caller) {
         fprintf(stderr, "bt3 task: %s on a NULL list, class %p, caller game offset %p\n", what, cls, caller);
     }
 }
+static void BtlTaskList_BadList(BtlTaskList *list, void *cls, void *caller) {
+    static int n;
+
+    if (n < 20) {
+        n++;
+        fprintf(stderr, "bt3 task: AddFirst on a list with no free task: list %p parent %p head %p tail %p free %p tasks %p work %p class %p caller %p\n",
+                (void *)list, (void *)list->parent, (void *)list->head, (void *)list->tail, (void *)list->free,
+                (void *)list->tasks, list->work, cls, caller);
+    }
+}
 #else
 #define BtlTaskList_NullList(what, cls, caller) ((void)0)
+#define BtlTaskList_BadList(list, cls, caller) ((void)0)
 #endif
 
 /* Adds a task to an empty list. Does not check that a free task exists. */
 BtlTask *BtlTaskList_AddFirst(BtlTaskList *list, BtlTaskCls *cls, void *arg) {
     BtlTask *task = list->free;
 
+    if (task == NULL) {
+        BtlTaskList_BadList(list, cls, __builtin_return_address(0));
+        return NULL;
+    }
     list->tail = task;
     list->head = task;
     task->prev = NULL;

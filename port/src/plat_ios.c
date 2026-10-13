@@ -98,10 +98,54 @@ void *Ios_MapWindow(uint64_t size) {
     return NULL;
 }
 
+/* Bring-up: a fault inside the game's code is logged and its instruction skipped, so one run shows many bugs
+   instead of one. A load leaves its register as it was. Gives up (full dump below) after 400 skips in total or 4
+   at the same pc. */
+static int skip_fault(int sig, siginfo_t *si, ucontext_t *uc) {
+    static int total;
+    static uintptr_t seen[64];
+    static int cnt[64];
+    __typeof__(uc->uc_mcontext->__ss) *ss = &uc->uc_mcontext->__ss;
+    uintptr_t pc = (uintptr_t)__darwin_arm_thread_state64_get_pc(*ss);
+    uintptr_t lr = (uintptr_t)__darwin_arm_thread_state64_get_lr(*ss);
+    uintptr_t lo = hdr(), hi = hdr() + (uintptr_t)image_end();
+    uintptr_t fp = (uintptr_t)__darwin_arm_thread_state64_get_fp(*ss);
+    uintptr_t sp = (uintptr_t)__darwin_arm_thread_state64_get_sp(*ss);
+    int i, k;
+
+    if ((sig != SIGSEGV && sig != SIGBUS) || pc < lo || pc >= hi || total >= 400) {
+        return 0;
+    }
+    for (i = 0; i < 64 && seen[i] != 0 && seen[i] != pc; i++) {
+    }
+    if (i == 64) {
+        return 0;
+    }
+    seen[i] = pc;
+    if (++cnt[i] > 4) {
+        return 0;
+    }
+    total++;
+    fprintf(stderr, "bt3 SKIP #%d: signal %d addr %p pc offset 0x%llx lr offset 0x%llx chain:", total, sig, si->si_addr,
+            (unsigned long long)(pc - lo), (unsigned long long)(lr - lo));
+    for (k = 0; k < 8 && fp != 0 && (fp & 7) == 0 && fp >= sp && fp - sp < 0x100000; k++) {
+        uintptr_t ra = ((uintptr_t *)fp)[1];
+        fprintf(stderr, " 0x%llx", (unsigned long long)(ra - lo));
+        fp = ((uintptr_t *)fp)[0];
+    }
+    fprintf(stderr, "\n");
+    __darwin_arm_thread_state64_set_pc_fptr(*ss, (void *)(pc + 4));
+    return 1;
+}
+
 static void crash(int sig, siginfo_t *si, void *ctx) {
     ucontext_t *uc = (ucontext_t *)ctx;
     void *bt[48];
     int n;
+
+    if (skip_fault(sig, si, uc)) {
+        return;
+    }
 
     fprintf(stderr, "\nbt3: signal %d, address %p, pc 0x%llx (offset 0x%llx), lr 0x%llx, sp 0x%llx\n", sig, si->si_addr,
             (unsigned long long)__darwin_arm_thread_state64_get_pc(uc->uc_mcontext->__ss),
