@@ -314,7 +314,7 @@ void Port_DiagBlock(const char *what, const void *p, uint32_t bytes) {
     uint32_t n = bytes / 4, k, nz = 0;
     int first = -1;
 
-    if (sLines >= 120 || p == NULL) {
+    if (sLines >= 400 || p == NULL) {
         return;
     }
     sLines++;
@@ -335,7 +335,7 @@ void Port_DiagBlock(const char *what, const void *p, uint32_t bytes) {
 void Port_DiagNote(const char *what, long a, long b) {
     static int sLines;
 
-    if (sLines++ < 120) {
+    if (sLines++ < 400) {
         fprintf(stderr, "bt3 diag: %s %ld %ld\n", what, a, b);
     }
 }

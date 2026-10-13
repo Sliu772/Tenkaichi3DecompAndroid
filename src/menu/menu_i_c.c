@@ -49,11 +49,24 @@ void Logo_Term(void) {
         ColorFade_StartOut(0xFF, 0xFF, 0xFF, n); \
     }
 
+/* bring-up (iOS): is the first picture of the logo still in memory? (the blocks arrive at the GS as zeros) */
+static void Logo_Probe(const char *when) {
+    u32 *e;
+
+    if (gLogo == NULL) {
+        return;
+    }
+    e = (u32 *)MTEX((MTexRes *)gLogo->pic, 0);
+    Port_DiagBlock(when, (u8 *)gLogo->pic + e[0] * 4, (u32)e[2]);
+}
+
 /*
  * Shows one full-screen picture: optional fade out of what is on screen first, fade in (from black or white),
  * `frames` + 2 frames, fade out (to black or white). The background partition load is polled every frame.
  */
 void Logo_Show(u32 *pack, s32 section, s32 frames, s32 fade, s32 skip, s32 inBlack, s32 outBlack, s32 fadeFirst) {
+    s32 it = 0;
+
     Logo_Init(pack, section, frames);
     if (fadeFirst) {
         LOGO_FADE_OUT(inBlack, fade);
@@ -76,14 +89,21 @@ void Logo_Show(u32 *pack, s32 section, s32 frames, s32 fade, s32 skip, s32 inBla
         ColorFade_StartIn(0xFF, 0xFF, 0xFF, fade);
     }
     while (1) {
+        if (it < 3) { Port_DiagNote("logo loop, iteration", it, section); Logo_Probe("probe: loop top"); }
         Gfx_BeginFrame();
         Pad_Update();
         ColorFade_Update();
+        if (it < 3) { Logo_Probe("probe: before Sprite_DrawPicture"); }
         Sprite_DrawPicture(gLogo->pic, 0, 0, 0x80);
+        if (it < 3) { Logo_Probe("probe: after Sprite_DrawPicture"); }
         File_WaitPartitionTimeout(2);
+        if (it < 3) { Logo_Probe("probe: after File_WaitPartitionTimeout"); }
         ColorFade_Draw();
         Gfx_EndFrame(1);
+        if (it < 3) { Logo_Probe("probe: after Gfx_EndFrame"); }
         Dma_Flush();
+        if (it < 3) { Logo_Probe("probe: after Dma_Flush"); }
+        it++;
         File_Stub264D90();
         if (ColorFade_IsInDone()) {
             gLogo->flags |= LOGO_FADED_IN;
