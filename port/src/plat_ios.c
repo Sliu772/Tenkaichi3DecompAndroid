@@ -110,7 +110,7 @@ static void crash(int sig, siginfo_t *si, void *ctx) {
         /* backtrace() below runs on the signal's own stack and says nothing about the faulting code, so also: the
            argument registers, the frame-pointer chain and the stack words that point into the game's image (return
            addresses, as offsets for bt3.map: address in the map = 0x100000000 + offset). */
-        const __darwin_arm_thread_state64_t *ss = &uc->uc_mcontext->__ss;
+        __typeof__(uc->uc_mcontext->__ss) *ss = &uc->uc_mcontext->__ss;
         uintptr_t lo = hdr(), hi = hdr() + (uintptr_t)image_end();
         uintptr_t sp = (uintptr_t)__darwin_arm_thread_state64_get_sp(*ss);
         uintptr_t fp = (uintptr_t)__darwin_arm_thread_state64_get_fp(*ss);
