@@ -154,7 +154,10 @@ extern s32 BtlStage_DestroyObj(s32 objId, s32 idx, EftDetVec *hitPos);
 extern s32 BtlStage_DamageObj(s32 idx, s32 damage);
 extern void StgCol_SetModeAll(void);
 extern void StgCol_SetModeObjects(void);
-extern s32 StgCol_QueryZone(EftDetResult *result, void *zone, EftDetBox *box, void *ctx, void *callback);
+/* The callback is a typedef on purpose (like StgColCb in eft_det_b.h): a typedef keeps the 4-byte pointer, which on iOS is an
+   offset from the image header. A plain `void *` passed the real address and StgCol_QueryZone read it as an offset. */
+typedef s32 (*EftDetQueryCb)();
+extern s32 StgCol_QueryZone(EftDetResult *result, void *zone, EftDetBox *box, void *ctx, EftDetQueryCb callback);
 extern s32 StgCol_FirstBit(u64 mask);
 extern void StgCol_FighterBreakObj(EftDetObj *obj, s32 idx, EftDetVec *hitPos);
 
@@ -1292,7 +1295,7 @@ s32 EftDet_TestStage(EftDetShape *shape, s32 isBlast, s32 objectsOnly) {
     if (objectsOnly) {
         StgCol_SetModeObjects();
     }
-    if (!StgCol_QueryZone(&result, zone, &box, &ctx, EftDet_StageCb)) {
+    if (!StgCol_QueryZone(&result, zone, &box, &ctx, (EftDetQueryCb)EftDet_StageCb)) {
         return 0;
     }
     if (result.obj != 0) {
@@ -1444,7 +1447,7 @@ void StgGround_Probe(s32 zone, EftDetBox *box, StgGroundOut *out, f32 minY) {
     ctx.minY = minY;
     z = BtlStage_GetZone(BtlStage_FindZoneNear(zone, &center));
     StgCol_SetModeAll();
-    StgCol_QueryZone(&gStgGroundResult, z, &b, &ctx, StgGround_Cb);
+    StgCol_QueryZone(&gStgGroundResult, z, &b, &ctx, (EftDetQueryCb)StgGround_Cb);
 }
 
 /* Per-frame ground query of a fighter object: probes below the body sphere's height at the object's position and

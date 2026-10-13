@@ -62,7 +62,7 @@ extern s32 Fade_IsDone(s32 idx);
 extern void Snd_LoadBank(s32 mask, void *data, s32 arg);
 extern void Snd_UnloadBank(s32 mask);
 extern void Res_RelocateOffsets(void *out, void *base, void *hdr);
-extern s32 BtlObj_Get(s32 id);
+extern void *BtlObj_Get(s32 id);
 
 /* Sound driver. */
 extern void Snd_Reset(void);                         /* clears the 8 bank slots' transfer state */
@@ -99,7 +99,7 @@ extern s32 BtlSide_GetActiveMember(s32 side); /* member index */
 extern s32 BtlCtrl_IsSwitching(s32 side);
 
 /* Battle objects / models. */
-extern s32 BtlObj_Create(s32 slot, s32 model, s32 arg);
+extern s32 BtlObj_Create(s32 slot, void *model, s32 arg);
 extern s32 BtlObj_CreateChara(s32 id);
 extern void BtlObj_Rebind(s32 objId, s32 id);
 extern s32 BtlObj_RequestCharaModel(s32 side, s32 chara, s32 costume, s32 variant);
@@ -107,11 +107,11 @@ extern void BtlRes_CommitReloadEx(void);
 extern void BtlObj_Init(s32 arg);
 extern void BtlObj_Term(void);
 extern s32 BtlRes_Request(s32 arg, s32 file, s32 file8, s32 file9);
-extern s32 BtlRes_GetSlot(s32 handle);
+extern void *BtlRes_GetSlot(s32 handle);
 extern void BtlRes_Reload(s32 id, s32 file, s32 file8, s32 file9);
 extern void BtlRes_CommitReload2(void);
-extern void BtlObjAnim_PlayAuto(s32 obj, s32 arg, s32 arg2);
-extern void BtlObjAnim_PlayModel(s32 obj, s32 arg, s32 arg2);
+extern void BtlObjAnim_PlayAuto(void *obj, s32 arg, s32 arg2);
+extern void BtlObjAnim_PlayModel(void *obj, s32 arg, s32 arg2);
 
 /* Script / message objects. */
 extern void Gsc_InitDefault(s32 *tbl);
