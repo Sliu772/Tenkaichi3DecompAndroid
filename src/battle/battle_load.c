@@ -487,6 +487,14 @@ s32 BtlLoad_StepChara(BtlJob *job) {
     return 0;
 }
 
+#ifdef PORT
+/* iOS bring-up diagnostic: the four sound buffers' pointers at each step of the battle sound load (tag = step) */
+extern void Port_BtlSndDiag(s32 tag, u32 res, u32 a, u32 b, u32 c, u32 d);
+#define SND_DIAG(tag) Port_BtlSndDiag((tag), (u32)res, (u32)res->sndCommon, (u32)res->sndStage, (u32)res->sndChara[0], (u32)res->sndChara[1])
+#else
+#define SND_DIAG(tag) ((void)0)
+#endif
+
 /* Job: the first load of a battle. */
 s32 BtlLoad_StepInitial(BtlJob *job) {
     BattleRes *res = BATTLE_RES;
@@ -502,6 +510,7 @@ s32 BtlLoad_StepInitial(BtlJob *job) {
         res->sndStage = File_Request3(BTL_STAGE_BANK(Battle_GetStartStage()), NULL, 0);
         res->sndChara[0] = File_Request3(BattleSide_GetStartChara(0) + ((gSaveData->flags & SAVE_FLAG_VOICE) ? BTL_FILE_VOICE_ALT : BTL_FILE_VOICE), NULL, 0);
         res->sndChara[1] = File_Request3(BattleSide_GetStartChara(1) + ((gSaveData->flags & SAVE_FLAG_VOICE) ? BTL_FILE_VOICE_ALT : BTL_FILE_VOICE), NULL, 0);
+        SND_DIAG(1);
         job->state++;
         return 0;
     case 1:
@@ -511,16 +520,22 @@ s32 BtlLoad_StepInitial(BtlJob *job) {
         job->state++;
         /* fall through */
     case 2:
+        SND_DIAG(2);
         Snd_LoadBank(4, res->sndCommon, 0);
+        SND_DIAG(3);
         Snd_LoadBank(8, res->sndStage, 0);
+        SND_DIAG(4);
         Snd_LoadBank(0x10, res->sndChara[0], 0);
+        SND_DIAG(5);
         Snd_LoadBank(0x20, res->sndChara[1], 0);
+        SND_DIAG(6);
         job->state++;
         break;
     case 3:
         if (!Snd_IsUploadDone()) {
             break;
         }
+        SND_DIAG(7);
         Heap_Free(res->sndCommon);
         res->sndCommon = NULL;
         Heap_Free(res->sndStage);

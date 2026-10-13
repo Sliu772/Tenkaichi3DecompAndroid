@@ -869,6 +869,27 @@ void Port_LowFree(void *addr) {
 }
 
 /* diagnostic (iOS bring-up): called by Heap_Free when the pointer is not a block of the game's heap */
+/* diagnostic (iOS bring-up): the ASLR slide (the header's run-time address minus its link-time one) */
+unsigned Port_DiagSlide(void) {
+#ifdef __APPLE__
+    return (unsigned)(PORT_BASE - (uintptr_t)0x100000000ULL);
+#else
+    return 0;
+#endif
+}
+
+/* diagnostic: the block that holds a pointer Heap_Free did not find; k 0 = the pointer as given, 1 = slide taken off */
+void Port_HeapDiag2(int k, unsigned ptr, unsigned blk, int used, unsigned data, int size) {
+    fprintf(stderr, "bt3 heap: cand%d 0x%X -> block 0x%X used %d data 0x%X size 0x%X%s\n", k, ptr, blk, used, data, (unsigned)size,
+            blk == 0 ? " (no block holds it)" : "");
+}
+
+/* diagnostic: battle sound buffers (battle_load.c). Values are game addresses; base = the header's address. */
+void Port_BtlSndDiag(int tag, unsigned res, unsigned a, unsigned b, unsigned c, unsigned d) {
+    fprintf(stderr, "bt3 snd: step %d res 0x%X common 0x%X stage 0x%X chara0 0x%X chara1 0x%X (slide 0x%X)\n", tag, res, a, b, c, d,
+            Port_DiagSlide());
+}
+
 void Port_HeapDiag(unsigned ptr, int heap, unsigned start, unsigned end, int blocks, int used, unsigned firstData, unsigned lastBlock, int lastSize, unsigned lastMagic) {
     fprintf(stderr, "bt3 heap: Heap_Free(0x%X) not found. heap %d: start 0x%X end 0x%X, %d blocks (%d used), first used data 0x%X, last block 0x%X size 0x%X magic 0x%X\n",
             ptr, heap, start, end, blocks, used, firstData, lastBlock, lastSize, lastMagic);

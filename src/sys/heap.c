@@ -297,7 +297,33 @@ void Heap_Free(void *ptr) {
                 Port_HeapDiag((u32)ptr, i, (u32)gHeapStart[i], (u32)gHeapEnd[i], n, nused, firstData, (u32)last,
                               last != NULL ? last->size : 0, last != NULL ? last->magic : 0);
             }
+            {
+                /* Which block holds the pointer: as given (k 0) and with the ASLR slide taken off (k 1). */
+                extern u32 Port_DiagSlide(void);
+                extern void Port_HeapDiag2(s32 k, u32 ptr, u32 blk, s32 used, u32 data, s32 size);
+                u32 cand[2];
+                s32 k, hit;
+
+                cand[0] = (u32)ptr;
+                cand[1] = (u32)ptr - Port_DiagSlide();
+                for (k = 0; k < 2; k++) {
+                    hit = 0;
+                    for (i = 0; i < HEAP_COUNT; i++) {
+                        for (b = gHeapStart[i]; b != NULL; b = Heap_NextBlock(b)) {
+                            if ((u32)b <= cand[k] && cand[k] < (u32)b + (u32)b->size) {
+                                Port_HeapDiag2(k, cand[k], (u32)b, b->used, b->data, b->size);
+                                hit = 1;
+                            }
+                        }
+                    }
+                    if (!hit) {
+                        Port_HeapDiag2(k, cand[k], 0, 0, 0, 0);
+                    }
+                }
+            }
         }
+        /* a pointer that is not a block: do not go on with block == NULL (Heap_FreeBlock(NULL) crashes) */
+        return;
 #endif
         Heap_ReportBadFree();
     }
