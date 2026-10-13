@@ -1,4 +1,6 @@
 #include "common.h"
+/* libc: declared so that the call converts the 4-byte pointers into host pointers (an undeclared function would be handed them as they are) */
+extern char *strcpy(char *dst, const char *src);
 #include "menu/menu_v.h"
 
 /*
