@@ -265,8 +265,8 @@ int ADXF_ReadNw(void *h, int nsct, void *buf) {
     if (sDiagN < 400 && nsct > 0) {
         const uint8_t *b = (const uint8_t *)buf;
         sDiagN++;
-        fprintf(stderr, "bt3 read: %s pos %d nsct %d got %lu head %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x\n", f->rel, (int)f->posSct, nsct,
-                (unsigned long)got, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11]);
+        fprintf(stderr, "bt3 read: %s pos %d nsct %d got %lu buf %08x head %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x\n", f->rel, (int)f->posSct, nsct,
+                (unsigned long)got, (unsigned)Port_P2A(buf), b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11]);
     }
     memset((uint8_t *)buf + got, 0, (size_t)nsct * SECTOR - got);
     f->posSct += nsct;

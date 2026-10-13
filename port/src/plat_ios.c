@@ -318,20 +318,19 @@ static void *heartbeat(void *arg) {
                 tl[n++] = '\n';
                 if (write(2, tl, n) < 0) {
                 }
-                if (gSndMgr != 0) { /* the 8 sound bank slots: {spuAddr, bodySize, hdSize, seqSize, spuSize, pending} */
-                    char bl[8 * 54 + 16];
+                if (gSndMgr != 0) { /* the 8 sound bank slots: {spuAddr, bodySize, hdSize, seqSize, spuSize, pending, body, hd} */
+                    char bl[8 * 8 * 9 + 32];
                     const unsigned char *m = (const unsigned char *)(base + gSndMgr);
                     int bk, f;
-                    static const int fld[] = {0x00, 0x18, 0x1C, 0x20, 0x24, 0x30};
+                    static const int fld[] = {0x00, 0x18, 0x1C, 0x20, 0x24, 0x30, 0x0C, 0x10};
                     memcpy(bl, "bt3 snd ", 8);
                     n = 8;
                     for (bk = 0; bk < 8; bk++) {
                         bl[n++] = '|';
-                        for (f = 0; f < 6; f++) {
+                        for (f = 0; f < 8; f++) {
                             hb_hex32(bl + n, *(const unsigned *)(m + bk * 0x4C + fld[f]));
                             n += 8;
-                            bl[n++] = f < 5 ? ' ' : '|';
-                            if (f == 5) n--;
+                            bl[n++] = ' ';
                         }
                     }
                     bl[n++] = '\n';
