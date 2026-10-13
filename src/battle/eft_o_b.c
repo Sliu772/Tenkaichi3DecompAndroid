@@ -1,3 +1,6 @@
+#ifdef PORT
+#include <stdio.h>
+#endif
 #include "common.h"
 #include "battle/eft_o.h"
 
@@ -354,6 +357,17 @@ void EftBlastObj_Init(EftOTask *task, EftBlastObjArg *arg) {
     s32 slot;
 
     (void)&arg;
+#ifdef PORT
+    {
+        static int n;
+
+        if (n < 6) {
+            n++;
+            fprintf(stderr, "bt3 blast init: task %p w %p arg %p (raw 0x%x) arg->nodes %p (raw 0x%x)\n", (void *)task,
+                    (void *)w, (void *)arg, (unsigned)(u32)arg, (void *)arg->nodes, (unsigned)(u32)arg->nodes);
+        }
+    }
+#endif
     memset(w, 0, sizeof(EftBlastObj));
     w->set = arg->set;
     w->src = src = arg->src;
@@ -528,6 +542,18 @@ void *EftBlastObj_Create(EftBlastObjArg *arg) {
     EftBlastObjArg a = *arg;
 
     a.model = NULL;
+#ifdef PORT /* iOS bring-up: first calls, real addresses (%p) and the raw 4-byte values (0x...) */
+    {
+        static int n;
+
+        if (n < 6) {
+            n++;
+            fprintf(stderr, "bt3 blast create: arg %p (raw 0x%x) &a %p (raw 0x%x) a.nodes %p (raw 0x%x) src %p set %p\n",
+                    (void *)arg, (unsigned)(u32)arg, (void *)&a, (unsigned)(u32)&a, (void *)a.nodes,
+                    (unsigned)(u32)a.nodes, (void *)a.src, (void *)a.set);
+        }
+    }
+#endif
     return BtlTaskList_AddTail(gEftBlastObjList, gEftBlastObjClass, &a);
 }
 
