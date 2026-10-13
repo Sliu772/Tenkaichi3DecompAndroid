@@ -102,6 +102,14 @@ jobs:
         run: |
           mkdir -p ir
           cp port/build/ios/obj/*menu_i_b*.ll port/build/ios/obj/*sys_mcflow_a*.ll ir/ 2>/dev/null || true
+          cp port/build/ios/obj/battle_eft_o_b.ll port/build/ios/obj/battle_eft_o_b.raw.ll ir/ 2>/dev/null || true
+          {
+            for v in raw final; do
+              f=port/build/ios/obj/battle_eft_o_b.ll; [ $v = raw ] && f=port/build/ios/obj/battle_eft_o_b.raw.ll
+              echo; echo "== EftBlastObj_Create, $v IR =="
+              awk '/^define .*@EftBlastObj_Create\(/ {p=1} p {print} p && /^}/ {exit}' "$f"
+            done
+          } > ir/blast_ir.txt 2>&1 || true
           {
             echo "== BootCard_Init, raw clang IR =="
             awk '/^define .*@BootCard_Init\(/ {p=1} p {print} p && /^}/ {exit}' port/build/ios/obj/menu_menu_i_b.raw.ll
