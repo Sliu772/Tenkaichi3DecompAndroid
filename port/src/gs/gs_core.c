@@ -1406,6 +1406,20 @@ static void run_chain(uint32_t tadr, int tte) {
         }
         if (sDumpFrame == (int)sFrame) {
             fprintf(stderr, "  dma tag at %08x: id %u qwc %u addr %08x | %08x %08x (depth %u)\n", (unsigned)Port_P2A(tag), id, qwc, addr, tag[2], tag[3], sp);
+            if (qwc != 0) { /* bring-up (iOS): what the block really holds: its first words, and how many of its words are not zero */
+                uint32_t k, nz = 0, first = 0xFFFFFFFFu;
+                for (k = 0; k < qwc * 4; k++) {
+                    if (data[k] != 0) {
+                        nz++;
+                        if (first == 0xFFFFFFFFu) { first = k; }
+                    }
+                }
+                fprintf(stderr, "    block: %u words, %u not zero, first at %d; data:", qwc * 4, nz, (int)first);
+                for (k = 0; k < 12 && k < qwc * 4; k++) {
+                    fprintf(stderr, " %08x", data[k]);
+                }
+                fprintf(stderr, "\n");
+            }
         }
         sStat[0]++;
         if (tte) {
