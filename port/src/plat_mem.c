@@ -884,6 +884,18 @@ void Port_HeapDiag2(int k, unsigned ptr, unsigned blk, int used, unsigned data, 
             blk == 0 ? " (no block holds it)" : "");
 }
 
+/* diagnostic: the first heap allocations (heap.c). `field` is the block's data field, `ret` the pointer handed out (as an offset) */
+void Port_HeapAllocDiag(int size, unsigned block, unsigned field, unsigned ret) {
+    fprintf(stderr, "bt3 alloc: size 0x%X block 0x%X data field 0x%X returned 0x%X (data - block = 0x%X)\n", (unsigned)size, block, field, ret,
+            field - block);
+}
+
+/* diagnostic: Heap_Alloc found no block */
+void Port_HeapAllocFail(int size, int align, int heap, int freeTotal, int largest, int nfree, int nused) {
+    fprintf(stderr, "bt3 alloc FAILED: size 0x%X align 0x%X heap %d; free bytes 0x%X in %d blocks, largest 0x%X, used blocks %d\n",
+            (unsigned)size, (unsigned)align, heap, (unsigned)freeTotal, nfree, (unsigned)largest, nused);
+}
+
 /* diagnostic: battle sound buffers (battle_load.c). Values are game addresses; base = the header's address. */
 void Port_BtlSndDiag(int tag, unsigned res, unsigned a, unsigned b, unsigned c, unsigned d) {
     fprintf(stderr, "bt3 snd: step %d res 0x%X common 0x%X stage 0x%X chara0 0x%X chara1 0x%X (slide 0x%X)\n", tag, res, a, b, c, d,
