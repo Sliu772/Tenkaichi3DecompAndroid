@@ -162,8 +162,10 @@ class Ctx:
         return r
 
 
-CAST_TO_PTR = re.compile(r'^(\s*%[\w.$-]+ = )addrspacecast ptr addrspace\(271\) (.*) to ptr$')
-CAST_TO_P32 = re.compile(r'^(\s*%[\w.$-]+ = )addrspacecast ptr (.*) to ptr addrspace\(271\)$')
+# (a line can end in debug metadata, `, !dbg !85`, with -g: the match has to allow it and the result keeps it)
+_MD = r'((?:, ![\w.]+ !\d+)*)$'
+CAST_TO_PTR = re.compile(r'^(\s*%[\w.$-]+ = )addrspacecast ptr addrspace\(271\) (.*?) to ptr' + _MD)
+CAST_TO_P32 = re.compile(r'^(\s*%[\w.$-]+ = )addrspacecast ptr (.*?) to ptr addrspace\(271\)' + _MD)
 
 
 def rebase(text, anchor):
@@ -188,13 +190,13 @@ def rebase(text, anchor):
         if m:
             q = cx.to_ptr(m.group(2), pre, nullsafe=not re.match(r"\s*%p32(?:st|fix)\.", m.group(1)))
             out.extend(pre)
-            out.append(f"{m.group(1)}getelementptr i8, ptr {q}, i64 0")  # keeps the original result name
+            out.append(f"{m.group(1)}getelementptr i8, ptr {q}, i64 0{m.group(3)}")  # keeps the original result name (and its !dbg)
             continue
         m = CAST_TO_P32.match(line)
         if m:
             t = cx.to_p32(m.group(2), pre)
             out.extend(pre)
-            out.append(f"{m.group(1)}inttoptr i32 {t} to ptr addrspace(271)")
+            out.append(f"{m.group(1)}inttoptr i32 {t} to ptr addrspace(271){m.group(3)}")
             continue
         if STORE.match(line) or LOADLIKE.match(line):
             # the pointer operand: the last `, ptr addrspace(271) P` of a store/load, the first typed one of atomics
