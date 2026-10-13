@@ -27,6 +27,8 @@
 #include <sys/stat.h>
 #include <sys/ucontext.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <mach/mach.h>
 
 #include "ios_install.h" /* ios_prepare_data(): installs the game's data from an .iso in Documents */
 
@@ -215,8 +217,80 @@ static void find_moltenvk(void) {
     SDL_SetHint("SDL_VULKAN_LIBRARY", lib);
 }
 
+/* Heartbeat (iOS bring-up): a second thread that, every second, looks at where the game thread is (its pc and lr as
+   offsets for bt3.map) and how much memory the app uses, and writes one line to the log. If iOS kills the app (the
+   watchdog, or for memory: no signal, so no crash report), the last lines say where it was and how large it had grown.
+   Only system calls and write(): the game thread is stopped for a moment and may hold a lock of the C library. */
+static mach_port_t sGameThread;
+
+static void hb_hex(char *out, unsigned long long v) {
+    int i;
+    for (i = 0; i < 16; i++) {
+        out[i] = "0123456789abcdef"[(v >> (60 - i * 4)) & 15];
+    }
+}
+
+static void hb_dec(char *out, unsigned long long v) { /* 8 digits, zero padded */
+    int i;
+    for (i = 7; i >= 0; i--) {
+        out[i] = (char)('0' + v % 10);
+        v /= 10;
+    }
+}
+
+static void *heartbeat(void *arg) {
+    unsigned long long sec = 0;
+    (void)arg;
+    for (;;) {
+        arm_thread_state64_t st;
+        mach_msg_type_number_t cnt = ARM_THREAD_STATE64_COUNT;
+        task_vm_info_data_t vi;
+        mach_msg_type_number_t vc = TASK_VM_INFO_COUNT;
+        unsigned long long pc = 0, lr = 0, sp = 0, mb = 0, base = (unsigned long long)hdr();
+        int ok = 0;
+        char line[160] = "bt3 beat t=00000000s pc 0x0000000000000000 lr 0x0000000000000000 sp 0x0000000000000000 mem 00000000 MB\n";
+
+        sleep(sec < 60 ? 1 : 5);
+        sec += sec < 60 ? 1 : 5;
+        if (thread_suspend(sGameThread) == KERN_SUCCESS) {
+            if (thread_get_state(sGameThread, ARM_THREAD_STATE64, (thread_state_t)&st, &cnt) == KERN_SUCCESS) {
+                ok = 1;
+                pc = (unsigned long long)__darwin_arm_thread_state64_get_pc(st);
+                lr = (unsigned long long)__darwin_arm_thread_state64_get_lr(st);
+                sp = (unsigned long long)__darwin_arm_thread_state64_get_sp(st);
+            }
+            thread_resume(sGameThread);
+        }
+        if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vi, &vc) == KERN_SUCCESS) {
+            mb = (unsigned long long)vi.phys_footprint >> 20;
+        }
+        /* pc and lr as offsets from the header when inside the image (what bt3.map lists), else the raw address */
+        if (pc >= base && pc - base < 0x2000000ULL) pc -= base;
+        if (lr >= base && lr - base < 0x2000000ULL) lr -= base;
+        hb_dec(line + 11, sec);
+        if (ok) {
+            hb_hex(line + 26, pc);
+            hb_hex(line + 48, lr);
+            hb_hex(line + 70, sp);
+        }
+        hb_dec(line + 91, mb);
+        if (write(2, line, strlen(line)) < 0) {
+        }
+    }
+    return NULL;
+}
+
+static void start_heartbeat(void) {
+    pthread_t th;
+    sGameThread = mach_thread_self();
+    if (pthread_create(&th, NULL, heartbeat, NULL) == 0) {
+        pthread_detach(th);
+    }
+}
+
 static int game_entry(int argc, char *argv[]) {
     fprintf(stderr, "bt3 iOS: SDL started the app, calling the game\n");
+    start_heartbeat();
     ios_prepare_data(); /* no gamedata yet: unpack the .iso the user copied into Documents (shows its progress) */
     find_moltenvk();
     return __wrap_main(argc, argv);
