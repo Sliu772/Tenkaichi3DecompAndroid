@@ -21,6 +21,9 @@
  * BtlObj_UpdateVisibility only matches when BtlObjVis_GetList is not visible to the compiler. They are kept in
  * one file here because their constants are contiguous (.rodata 0x2F23F0..0x2F2420, .lit4 0x2FE630..0x2FE640).
  */
+#ifdef PORT
+#include <stdio.h>
+#endif
 #include "common.h"
 #include "battle/btl_obj.h"
 #include "battle/battle.h"
@@ -123,10 +126,30 @@ void BtlObj_TermNop(void) {
 void BtlObj_RebuildTable(void) {
     BtlObjNode *node;
 
+#ifdef PORT /* iOS bring-up: log the used list the first calls, and every node whose id is out of range (log only). */
+    static int calls;
+    static int bad;
+
+    if (calls < 4) {
+        List *ul = gBtlObjWork != NULL ? BtlObj_GetUsedList() : NULL;
+
+        calls++;
+        fprintf(stderr, "bt3 objtbl: call %d work %p list %p head %p tail %p count %d\n", calls, (void *)gBtlObjWork,
+                (void *)ul, ul != NULL ? (void *)ul->head : NULL, ul != NULL ? (void *)ul->tail : NULL,
+                ul != NULL ? (int)ul->count : -1);
+    }
+#endif
     if (gBtlObjWork != NULL) {
         memset(gBtlObjTbl, 0, sizeof(gBtlObjTbl));
         for (node = (BtlObjNode *)List_GetHead(BtlObj_GetUsedList()); node != NULL;
              node = (BtlObjNode *)List_GetNext(&node->link)) {
+#ifdef PORT
+            if ((u32)node->id >= 12 && bad < 8) {
+                bad++;
+                fprintf(stderr, "bt3 objtbl: BAD node %p id 0x%x link.next %p link.prev %p\n", (void *)node,
+                        (unsigned)node->id, (void *)node->link.next, (void *)node->link.prev);
+            }
+#endif
             gBtlObjTbl[node->id] = &node->obj;
         }
     }
