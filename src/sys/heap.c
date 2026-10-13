@@ -269,6 +269,36 @@ void Heap_Free(void *ptr) {
     block = Heap_FindBlock((u32)ptr);
 
     if (block == NULL) {
+#ifdef PORT
+        {
+            /* diagnostic (iOS bring-up): why the block is not there. Per heap: the first block, how many blocks the
+               walk finds, the first used block's data address, the last block and whether it ends at gHeapEnd. */
+            extern void Port_HeapDiag(u32 ptr, s32 heap, u32 start, u32 end, s32 blocks, s32 used, u32 firstData, u32 lastBlock, s32 lastSize, u32 lastMagic);
+            HeapBlock *b;
+            HeapBlock *last;
+            s32 i, n, nused;
+            u32 firstData;
+
+            for (i = 0; i < HEAP_COUNT; i++) {
+                n = 0;
+                nused = 0;
+                firstData = 0;
+                last = NULL;
+                for (b = gHeapStart[i]; b != NULL && n < 100000; b = Heap_NextBlock(b)) {
+                    if (b->used == 1) {
+                        if (nused == 0) {
+                            firstData = b->data;
+                        }
+                        nused++;
+                    }
+                    last = b;
+                    n++;
+                }
+                Port_HeapDiag((u32)ptr, i, (u32)gHeapStart[i], (u32)gHeapEnd[i], n, nused, firstData, (u32)last,
+                              last != NULL ? last->size : 0, last != NULL ? last->magic : 0);
+            }
+        }
+#endif
         Heap_ReportBadFree();
     }
     Heap_FreeBlock(block);

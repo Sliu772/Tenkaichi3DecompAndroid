@@ -867,3 +867,9 @@ void Port_LowFree(void *addr) {
     free(addr);
 #endif
 }
+
+/* diagnostic (iOS bring-up): called by Heap_Free when the pointer is not a block of the game's heap */
+void Port_HeapDiag(unsigned ptr, int heap, unsigned start, unsigned end, int blocks, int used, unsigned firstData, unsigned lastBlock, int lastSize, unsigned lastMagic) {
+    fprintf(stderr, "bt3 heap: Heap_Free(0x%X) not found. heap %d: start 0x%X end 0x%X, %d blocks (%d used), first used data 0x%X, last block 0x%X size 0x%X magic 0x%X\n",
+            ptr, heap, start, end, blocks, used, firstData, lastBlock, lastSize, lastMagic);
+}
