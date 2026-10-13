@@ -196,6 +196,46 @@ extern void Port_CallOnStack(void (*fn)(void), void *top);
 typedef struct PortJmp { uint64_t r[21]; } PortJmp; /* x19..x28, x29, x30, sp, d8..d15 */
 extern int port_jmp_save(PortJmp *j) __attribute__((returns_twice));
 extern void port_jmp_jump(PortJmp *j) __attribute__((noreturn));
+#ifdef __APPLE__
+/* Mach-O: C symbols carry a leading underscore; no .type/.size; .private_extern for .hidden */
+__asm__(".text\n"
+        ".p2align 2\n"
+        ".globl _port_jmp_save\n"
+        ".private_extern _port_jmp_save\n"
+        "_port_jmp_save:\n"
+        "    stp x19, x20, [x0, #0]\n"
+        "    stp x21, x22, [x0, #16]\n"
+        "    stp x23, x24, [x0, #32]\n"
+        "    stp x25, x26, [x0, #48]\n"
+        "    stp x27, x28, [x0, #64]\n"
+        "    stp x29, x30, [x0, #80]\n"
+        "    mov x16, sp\n"
+        "    str x16, [x0, #96]\n"
+        "    stp d8, d9, [x0, #104]\n"
+        "    stp d10, d11, [x0, #120]\n"
+        "    stp d12, d13, [x0, #136]\n"
+        "    stp d14, d15, [x0, #152]\n"
+        "    mov w0, #0\n"
+        "    ret\n"
+        ".p2align 2\n"
+        ".globl _port_jmp_jump\n"
+        ".private_extern _port_jmp_jump\n"
+        "_port_jmp_jump:\n"
+        "    ldp x19, x20, [x0, #0]\n"
+        "    ldp x21, x22, [x0, #16]\n"
+        "    ldp x23, x24, [x0, #32]\n"
+        "    ldp x25, x26, [x0, #48]\n"
+        "    ldp x27, x28, [x0, #64]\n"
+        "    ldp x29, x30, [x0, #80]\n"
+        "    ldr x16, [x0, #96]\n"
+        "    mov sp, x16\n"
+        "    ldp d8, d9, [x0, #104]\n"
+        "    ldp d10, d11, [x0, #120]\n"
+        "    ldp d12, d13, [x0, #136]\n"
+        "    ldp d14, d15, [x0, #152]\n"
+        "    mov w0, #1\n"
+        "    ret\n");
+#else
 __asm__(".text\n"
         ".p2align 2\n"
         ".globl port_jmp_save\n"
@@ -237,6 +277,7 @@ __asm__(".text\n"
         "    mov w0, #1\n"
         "    ret\n"
         ".size port_jmp_jump, .-port_jmp_jump\n");
+#endif
 
 /* fn on the stack that ends at top (16-byte aligned); fn does not come back. */
 static void __attribute__((noinline, noreturn)) call_on_stack(void (*fn)(void), void *top) {

@@ -45,7 +45,7 @@ for p in (LLVM / "lib/python3/site-packages", TC / "clang-bindings"):
 os.environ["LD_LIBRARY_PATH"] = os.pathsep.join([str(LLVM / "lib"), str(pathlib.Path(GLSLC).parent), os.environ.get("LD_LIBRARY_PATH", "")])
 LIBCLANG = LLVM / ("lib/libclang.dylib" if IOS else "lib/libclang.so")
 sys.path.insert(0, str(HERE))
-import portsrc, eeconst, irfix  # noqa: E402
+import portsrc, eeconst, irfix, ios_pp  # noqa: E402
 try:
     import clang.cindex as _ci
     if LIBCLANG.exists():
@@ -86,7 +86,8 @@ def compile_ee(cmd, src, o, game_text=True):
     if r.returncode:
         return r
     i = pathlib.Path(str(o)[:-2] + ".i")
-    i.write_text(eeconst.transform(r.stdout))
+    # (Apple's headers: availability attributes hold version numbers that eeconst would turn into hex floats)
+    i.write_text(eeconst.transform(ios_pp.strip_availability(r.stdout) if IOS else r.stdout))
     std = next((a for a in cmd if a.startswith("-std=")), "-std=gnu89")
     if game_text:
         try:
@@ -219,7 +220,11 @@ def compile_all():
     for old in DATA.glob("*.o"):
         old.unlink()
     for f in (sorted((ROOT / "port/data").glob("*.s")) if blank else real):
-        r = run([CLANG] + TARGET + ["-c", str(f), "-o", str(DATA / (f.name[:-2] + ".o"))])
+        asm = f
+        if IOS:  # the tables' ELF assembler text in Mach-O's (sections, leading underscores)
+            asm = DATA / f.name
+            asm.write_text(ios_pp.macho_asm(f.read_text()))
+        r = run([CLANG] + TARGET + ["-c", str(asm), "-o", str(DATA / (f.name[:-2] + ".o"))])
         if r.returncode:
             failed.append(f.name)
             print("FAILED", f.name, r.stderr.strip()[:300])

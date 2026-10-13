@@ -227,7 +227,20 @@ static void map_heap(void) {
        Below the program at 0x20000000 on purpose: the C library's own heap starts at a random place in the
        gigabyte ABOVE the program, and a fixed address there (this stack used to be at 0x60000000) is sometimes
        taken, which stopped the program at start now and then. */
+#ifdef __APPLE__
+/* iOS: there is no <malloc.h> and no mallopt(), and the C library's heap lies above 4 GB where the game cannot point.
+   The game needs its own allocator below 4 GB for what the port hands to it (files, sound players); until that
+   exists these are no-ops so that the file compiles. */
+#define M_MMAP_MAX (-4)
+#define M_ARENA_MAX (-8)
+static inline int mallopt(int param, int value) {
+    (void)param;
+    (void)value;
+    return 0;
+}
+#else
 #include <malloc.h>
+#endif
 #include <pthread.h>
 #define STACK_BASE 0x02000000u
 #define STACK_SIZE 0x01000000u

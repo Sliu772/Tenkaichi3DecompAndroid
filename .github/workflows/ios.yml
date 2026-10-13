@@ -25,6 +25,10 @@ jobs:
         run: sh port/tools/ios_toolchain.sh
       - name: ABI check
         run: sh port/tools/ios_abi_check.sh 2>&1 | tee abi-check.log
+      - name: Show the result on the summary page
+        if: always()
+        run: |
+          { echo '### ABI check'; echo '```'; cat abi-check.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: abi-check, path: abi-check.log }
@@ -70,8 +74,15 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          { echo '### Engine compile (iOS arm64)'; grep -E '^compiled:' compile.log || echo 'did not finish';
-            echo; echo '```'; grep -E '^FAILED' compile.log | head -60; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo '### Engine compile (iOS arm64)'
+            grep -E '^compiled:' compile.log || echo 'did not finish'
+            echo; echo 'Errors grouped by message (count, message):'; echo '```'
+            grep -E '^FAILED' compile.log | sed -E 's/^FAILED [^ ]+ //; s#/[^ ]*/(Xcode[^ ]*|work/[^ ]*)/##' | cut -c1-200 | sort | uniq -c | sort -rn | head -40
+            echo '```'; echo; echo 'Files that failed:'; echo '```'
+            grep -E '^FAILED' compile.log | awk '{print $2}' | sort -u | head -150 | tr '\n' ' '
+            echo; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: engine-compile-log, path: compile.log }
