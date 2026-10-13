@@ -31,6 +31,7 @@
 #include "../port_host.h" /* Port_A2P / Port_P2A: the game's 4-byte addresses (offsets from the header on iOS) */
 #include <SDL3/SDL.h>
 #include <math.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -442,17 +443,34 @@ uint32_t sceSifSetDma(SifDmaData *d, int count) {
 
 /* sceSdRemote (0x2967C0 in the PS2 executable). Used for two things: 0x80D0 = transfer `size` bytes at `iopAddr`
    into the sound chip's memory at `spuAddr`; 0x80F0 = is the transfer over (always: it is done at once). */
-int func_002967C0(int block, int cmd, int core, int mode, void *iopAddr, uint32_t spuAddr, uint32_t size) {
-    (void)block; (void)core; (void)mode;
-    if (cmd == 0x80D0) {
-        if (iopAddr != NULL && spuAddr < SPU_SIZE && size <= SPU_SIZE - spuAddr) {
-            if (sStream != NULL) { SDL_LockAudioStream(sStream); }
-            memcpy(&sSpu[spuAddr], iopAddr, size);
-            if (sStream != NULL) { SDL_UnlockAudioStream(sStream); }
-        }
-        return 0;
+int func_002967C0(int block, int cmd, ...) {
+    /* The game calls this with a variable argument list (src/sys/snd.c declares it with "..."). On Apple arm64 the
+       arguments after the named ones travel on the stack, so they must be read with va_arg: declared with fixed
+       parameters, this function read garbage registers for the address, the SPU address and the size. */
+    va_list ap;
+    uint64_t addrRaw;
+    unsigned spuAddr, size;
+    void *iopAddr;
+
+    (void)block;
+    if (cmd != 0x80D0) {
+        return cmd == 0x80F0 ? 1 : 0;
     }
-    return cmd == 0x80F0 ? 1 : 0;
+    va_start(ap, cmd);
+    (void)va_arg(ap, int); /* core */
+    (void)va_arg(ap, int); /* mode */
+    addrRaw = va_arg(ap, uint64_t);
+    spuAddr = va_arg(ap, unsigned);
+    size = va_arg(ap, unsigned);
+    va_end(ap);
+    /* the address is either a host pointer (same upper half as the image) or the game's 4-byte address */
+    iopAddr = ((addrRaw >> 32) == ((uint64_t)PORT_BASE >> 32) && (addrRaw >> 32) != 0) ? (void *)(uintptr_t)addrRaw : Port_A2P((uint32_t)addrRaw);
+    if (iopAddr != NULL && spuAddr < SPU_SIZE && size <= SPU_SIZE - spuAddr) {
+        if (sStream != NULL) { SDL_LockAudioStream(sStream); }
+        memcpy(&sSpu[spuAddr], iopAddr, size);
+        if (sStream != NULL) { SDL_UnlockAudioStream(sStream); }
+    }
+    return 0;
 }
 
 /* sceSifCallRpc to SOUNDS.IRX (the only server the game calls this way): one command, answered at once. */
