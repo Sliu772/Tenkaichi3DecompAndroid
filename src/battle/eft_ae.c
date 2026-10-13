@@ -1,4 +1,7 @@
 #include "common.h"
+#ifdef PORT
+#include <stdio.h>
+#endif
 #include "battle/eft_ae.h"
 #include "sys/gfx_ot.h"
 
@@ -1278,6 +1281,16 @@ void BtlTaskList_CreateRoot(u32 count, u32 workSize) {
 /* Gives a task a child list of `count` tasks with `workSize` bytes of work each. */
 BtlTaskList *BtlTask_CreateChildList(BtlTask *task, u32 count, u32 workSize) {
     BtlTaskList *list = BtlTaskList_Create(task, count, workSize);
+#ifdef PORT
+    {
+        static int n;
+
+        if (n < 12) {
+            n++;
+            fprintf(stderr, "bt3 childlist: task %p count %u -> list %p\n", (void *)task, count, (void *)list);
+        }
+    }
+#endif
 
     /* Not `return task->child = ...`: on iOS the value of that assignment comes back as the low 32 bits of the host
        address (off by the image slide), while the stored field is right. */

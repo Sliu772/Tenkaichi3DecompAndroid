@@ -1525,8 +1525,13 @@ extern s32 *BtlScene_GetCommonEntry(s32 idx);
 extern s32 BtlScene_IsCharInView(s32 objId);
 extern s32 BtlScene_IsEffectHidden(s32 objId, s32 type);
 extern s32 BtlScene_IsEffectStopped(s32 objId, s32 type);
+#ifdef PORT /* direct calls through the declarations above: no cast of the function to another function type */
+#define BtlTask_CreateChildList(task, count, workSize) ((void *)(BtlTask_CreateChildList)((EftTask *)(task), (count), (workSize)))
+#define BtlTaskList_AddTail(list, cls, arg) ((EftTTask *)(BtlTaskList_AddTail)((list), (void *)(cls), (void *)(arg)))
+#else
 #define BtlTask_CreateChildList ((void *(*)(EftTTask *task, s32 count, s32 workSize))BtlTask_CreateChildList)
 #define BtlTaskList_AddTail ((EftTTask *(*)(void *list, void *cls, void *arg))BtlTaskList_AddTail)
+#endif
 #define BtlTask_SetDead ((void (*)(EftTTask *task))BtlTask_SetDead)                    /* kills the task */
 extern void BtlTask_SetOwnerTag(EftTTask *task, s32 flags);         /* ors into the task flags */
 extern void EftTexSet_Keep32(void *tex, s32 a1, s32 a2);         /* steps a texture set's animation */
