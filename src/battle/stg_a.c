@@ -32,6 +32,16 @@
 #include "battle/battle_work.h"
 #include "battle/stg_a.h"
 
+#ifdef __APPLE__
+/* iOS: the game's 4-byte addresses are OFFSETS from the image's Mach-O header (port/tools/p32rebase.py). An (s32)pointer of a
+   pointer PARAMETER is the low half of the real address, i.e. offset + ASLR slide: the offset tables below came out displaced by
+   the slide (same problem as PTR_ADDR in sys/heap.c). The difference to the header is the offset. 0 stays 0. */
+extern char _mh_execute_header[] __attribute__((visibility("hidden")));
+#define STG_ADDR(p) ((p) == NULL ? 0 : (s32)((u8 *)(p) - (u8 *)_mh_execute_header))
+#else
+#define STG_ADDR(p) ((s32)(p))
+#endif
+
 #ifdef PORT
 extern f32 Port_WideFactor(void); /* widescreen on PC: 1, or 4/3 for a 16:9 picture (port/src/plat_stub.c) */
 #endif
@@ -123,18 +133,19 @@ void StgOfsTable_Relocate(StgOfsTable *t) {
 
     if (t->relocated == 0) {
         for (i = 0; i < t->count; i++) {
-            t->entries[i] += (s32)t;
+            t->entries[i] += STG_ADDR(t);
         }
         t->relocated = 1;
     }
 }
 
-/* Entry i of an offset table, 0 when out of range. */
-s32 StgOfsTable_Get(StgOfsTable *t, s32 i) {
+/* Entry i of an offset table, NULL when out of range. Returns a pointer (every caller uses it as one): as an s32 the
+   iOS build handed the bare 4-byte offset to callers that declare a pointer, without the header base added. */
+void *StgOfsTable_Get(StgOfsTable *t, s32 i) {
     if (i < t->count) {
-        return t->entries[i];
+        return (void *)t->entries[i];
     }
-    return 0;
+    return NULL;
 }
 
 /* Number of entries of an offset table. */
@@ -148,10 +159,10 @@ void StgPathTable_Relocate(StgPathTable *t) {
     StgPath *p;
 
     if (t->relocated == 0) {
-        t->paths = (StgPath *)((s32)t->paths + (s32)t);
+        t->paths = (StgPath *)((s32)t->paths + STG_ADDR(t));
         p = t->paths;
         for (i = 0; i < t->count; i++, p++) {
-            p->points += (s32)t;
+            p->points += STG_ADDR(t);
         }
         t->relocated = 1;
     }

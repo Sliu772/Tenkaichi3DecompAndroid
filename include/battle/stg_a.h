@@ -271,7 +271,7 @@ extern BtlStage *gBtlStage; /* named in config/symbols/stg_b.txt */
 
 /* Offset tables of the stage file. */
 void StgOfsTable_Relocate(StgOfsTable *t);
-s32 StgOfsTable_Get(StgOfsTable *t, s32 i);
+void *StgOfsTable_Get(StgOfsTable *t, s32 i);
 s32 StgOfsTable_GetCount(StgOfsTable *t);
 void StgPathTable_Relocate(StgPathTable *t);
 
