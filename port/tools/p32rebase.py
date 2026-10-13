@@ -50,8 +50,17 @@ def operand_end(s, j):
     return j
 
 
+# Symbols of the game that stand for a PS2 ADDRESS used as a number, not for anything in the image. The header-relative
+# offset of such a symbol is that number (src/sys/heap.c: the heap's size is 0x1EFB000 - (u32)D_3BE71C, the console's
+# heap start). An absolute symbol would not do: a symbol becomes `sym - header` below. Same table: ios_pp.FIXED_ADDRESSES.
+FIXED = {"D_3BE71C": 0x3BE71C}
+
+
 def rel(x, anchor):
     """The 32-bit offset of the (constant) ordinary pointer expression x from the anchor."""
+    m = re.fullmatch(r"@([\w.$]+)", x.strip())
+    if m and m.group(1) in FIXED:
+        return str(FIXED[m.group(1)])
     return (f"trunc (i64 sub (i64 ptrtoint (ptr {x} to i64), i64 ptrtoint (ptr @{anchor} to i64)) to i32)")
 
 

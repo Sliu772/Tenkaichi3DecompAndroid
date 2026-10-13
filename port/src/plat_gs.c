@@ -9,7 +9,7 @@
  */
 #include <stdint.h>
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(__APPLE__)
 extern uint8_t gPortHwRegs[]; /* plat_mem.c: the registers live in the engine (irfix.py points the game there) */
 #define REG(a) ((volatile uint32_t *)(gPortHwRegs + ((uint32_t)(a) - 0x10000000u)))
 #else

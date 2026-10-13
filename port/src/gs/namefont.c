@@ -18,6 +18,7 @@
 
    Only reads the game's memory; the game's state is not touched. Runs on the game's thread for the copy of the sheets
    (once), and on the render thread for the rest (ui.cpp asks for a name's picture when it first shows it). */
+#include "../port_host.h" /* Port_A2P / Port_P2A: the game's 4-byte addresses (offsets from the header on iOS) */
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -105,8 +106,8 @@ static uint8_t *sheet_decode(const uint8_t *e) {
     static uint8_t mem[SHEET_W * SHEET_H];
     uint64_t tex0;
     uint32_t pixSize = rd32(e + 0x08), clutSize = rd32(e + 0x0C), pixBlt = rd32(e + 0x18), clutBlt = rd32(e + 0x1C);
-    const uint8_t *pix = (const uint8_t *)(uintptr_t)rd32(e + 0x38);
-    const uint8_t *clut = (const uint8_t *)(uintptr_t)rd32(e + 0x3C);
+    const uint8_t *pix = (const uint8_t *)Port_A2P(rd32(e + 0x38));
+    const uint8_t *clut = (const uint8_t *)Port_A2P(rd32(e + 0x3C));
     uint8_t *out;
     int x, y;
 
@@ -168,7 +169,7 @@ void Port_NameFontSheets(int stage, int song, int songLit) {
     memset(got, 0, sizeof(got));
     for (s = 0; s < NF_STYLES && !bad; s++) {
         for (i = 0; i < kNeed[s] && addr[s] != 0; i++) {
-            got[s][i] = sheet_decode((const uint8_t *)(uintptr_t)addr[s] + i * 0x40);
+            got[s][i] = sheet_decode((const uint8_t *)Port_A2P(addr[s]) + i * 0x40);
             if (got[s][i] == NULL) {
                 break;
             }

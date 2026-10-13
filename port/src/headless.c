@@ -308,7 +308,7 @@ void Port_Trace(unsigned vblanks) {
                         fwrite((void *)0x3BE730, 1, 0x1EFB014 - 0x3BE730, fp);
                         fclose(fp);
                     }
-#ifndef _WIN32 /* the linker symbols of an ELF program */
+#if !defined(_WIN32) && !defined(__APPLE__) /* the linker symbols of an ELF program (a developer's dump; not on iOS) */
                     {   /* the game's global variables too: [__data_start, _end), base address first */
                         extern char __data_start[], _end[];
                         uint32_t base = (uint32_t)(uintptr_t)__data_start;

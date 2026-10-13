@@ -209,7 +209,7 @@ def compile_all():
     jobs += [(newlib_source, f) for f in sorted((ROOT / "port/third_party/newlib_libm").glob("*.c"))]
     jobs += [(port_source, f) for f in [ROOT / "src/port/vu0_a.c", ROOT / "src/port/vu0_b.c"] + [f for f in sorted((ROOT / "port/src").glob("*.c")) if IOS or f.name != "plat_ios.c"]]
     jobs += [(gs_source, f) for f in sorted((ROOT / "port/src/gs").glob("*.c")) if not (IOS and f.name == "gs_gl.c")]  # (iOS: Vulkan through MoltenVK only)
-    jobs += [(cxx_source, f) for f in sorted((ROOT / "port/third_party/imgui").glob("*.cpp")) + sorted((ROOT / "port/src/gs").glob("*.cpp"))]
+    jobs += [(cxx_source, f) for f in [f for f in sorted((ROOT / "port/third_party/imgui").glob("*.cpp")) if not (IOS and f.name == "imgui_impl_opengl3.cpp")] + sorted((ROOT / "port/src/gs").glob("*.cpp"))]  # (iOS: no OpenGL back end: SDL_GPU only)
     only = os.environ.get("BT3_ONLY")  # a few files: BT3_ONLY=btl_obj,plat_mem
     if only:
         names = only.split(",")

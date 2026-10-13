@@ -6,6 +6,7 @@
  * Without them nothing clears the depth buffer between frames (seen as smears trailing behind camera pans).
  * The layout is libgraph's (include/sys/gfx.h in the game sources documents it).
  */
+#include "../port_host.h" /* Port_A2P / Port_P2A: the game's 4-byte addresses (offsets from the header on iOS) */
 #include <stdint.h>
 #include <string.h>
 
@@ -62,7 +63,7 @@ int sceGsSetDefDBuff(void *p, int psm, int w, int h, int ztest, int zpsm, int cl
 }
 
 int sceGsPutDrawEnv(uint64_t *giftag) {
-    Port_GsGifChannel((uint32_t)(uintptr_t)giftag, 1 + (uint32_t)(giftag[0] & 0x7FFF), 0);
+    Port_GsGifChannel(Port_P2A(giftag), 1 + (uint32_t)(giftag[0] & 0x7FFF), 0);
     return 0;
 }
 

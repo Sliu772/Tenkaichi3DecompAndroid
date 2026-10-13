@@ -18,6 +18,7 @@
 #include <mach-o/dyld.h>
 #include <mach-o/ldsyms.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,8 +28,11 @@
 #include <sys/ucontext.h>
 #include <unistd.h>
 
+#include "ios_install.h" /* ios_prepare_data(): installs the game's data from an .iso in Documents */
+
 extern int __wrap_main(int argc, char **argv);
 extern int SDL_RunApp(int argc, char *argv[], int (*mainFunction)(int, char *[]), void *reserved);
+extern bool SDL_SetHint(const char *name, const char *value);
 
 #define WINDOW 0x100000000ULL
 
@@ -73,6 +77,25 @@ static uint64_t find_window(uint64_t from, uint64_t size) {
     return 0;
 }
 
+/* The game's memory (plat_mem.c): ONE block of `size` bytes inside [header, header + 4 GB), the first that can be had
+   above the image (16 MB steps; the system chooses where an address that is only a hint ends up, so the result is
+   checked). It stays mapped. NULL: no room. */
+void *Ios_MapWindow(uint64_t size) {
+    uint64_t off;
+
+    for (off = (image_end() + 0xFFFFFFULL) & ~0xFFFFFFULL; off + size <= WINDOW; off += 0x1000000ULL) {
+        void *p = mmap((void *)(hdr() + off), (size_t)size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+        if (p == MAP_FAILED) {
+            continue;
+        }
+        if ((uintptr_t)p == hdr() + off) {
+            return p;
+        }
+        munmap(p, (size_t)size);
+    }
+    return NULL;
+}
+
 static void crash(int sig, siginfo_t *si, void *ctx) {
     ucontext_t *uc = (ucontext_t *)ctx;
     void *bt[48];
@@ -114,9 +137,7 @@ __attribute__((constructor(101))) static void Ios_Early(void) {
     char dir[1024], path[1100];
     uint64_t end, o;
     static const struct { const char *what; uint64_t size; } want[] = {
-        {"game heap (32 MB)", 0x2000000ULL},        {"port's low arena (192 MB)", 0xC000000ULL},
-        {"game thread stack (16 MB)", 0x1000000ULL}, {"256 MB", 0x10000000ULL},
-        {"512 MB", 0x20000000ULL},                   {"1 GB", 0x40000000ULL},
+        {"game window (240 MB)", 0xF000000ULL}, {"512 MB", 0x20000000ULL}, {"1 GB", 0x40000000ULL},
     };
     unsigned i;
 
@@ -150,8 +171,27 @@ __attribute__((constructor(101))) static void Ios_Early(void) {
     }
 }
 
+/* The renderer asks SDL_GPU for SPIR-V shaders, which only its Vulkan driver takes (the Metal one wants MSL): Vulkan on
+   Metal is MoltenVK, packaged next to the program (ios_package.sh). SDL's UIKit loader looks for "libvulkan.dylib" by its
+   bare name, which dyld does not find inside an app: it is given the framework's path. */
+static void find_moltenvk(void) {
+    char exe[1024], lib[1200];
+    uint32_t n = sizeof(exe);
+    char *slash;
+
+    if (_NSGetExecutablePath(exe, &n) != 0 || (slash = strrchr(exe, '/')) == NULL) {
+        return;
+    }
+    *slash = '\0';
+    snprintf(lib, sizeof(lib), "%s/Frameworks/MoltenVK.framework/MoltenVK", exe);
+    fprintf(stderr, "bt3 iOS: Vulkan library %s: %s\n", lib, access(lib, R_OK) == 0 ? "found" : "NOT FOUND (no renderer)");
+    SDL_SetHint("SDL_VULKAN_LIBRARY", lib);
+}
+
 static int game_entry(int argc, char *argv[]) {
     fprintf(stderr, "bt3 iOS: SDL started the app, calling the game\n");
+    ios_prepare_data(); /* no gamedata yet: unpack the .iso the user copied into Documents (shows its progress) */
+    find_moltenvk();
     return __wrap_main(argc, argv);
 }
 

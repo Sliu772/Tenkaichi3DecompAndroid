@@ -118,6 +118,11 @@ jobs:
         with: { name: SDL3-xcframework-ios, path: SDL3.xcframework }
       - uses: actions/download-artifact@v4
         with: { name: engine-objs, path: port/build/ios }
+      - name: MoltenVK (Vulkan on Metal; the renderer's SPIR-V shaders need SDL_GPU's Vulkan driver)
+        run: |
+          curl -fsSL -o mvk.tar https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-ios.tar
+          mkdir mvk && tar -xf mvk.tar -C mvk MoltenVK/MoltenVK/dynamic
+          echo "BT3_MOLTENVK=$PWD/mvk/MoltenVK/MoltenVK/dynamic/MoltenVK.xcframework" >> "$GITHUB_ENV"
       - name: Link
         run: |
           set -o pipefail
@@ -127,6 +132,8 @@ jobs:
           python3 port/tools/ios_link.py 2>&1 | tee link.log
       - name: Package
         run: sh port/tools/ios_package.sh "$PWD/SDL3.xcframework"
+      - name: What is inside the .ipa
+        run: unzip -l port/build/ios/bt3.ipa | tail -n +4 | awk '{print $1, $4}' | grep -E "Frameworks/[^/]+/[^/]+$|bt3(\.dat)?$|Info.plist" | head -20
       - name: Summary
         if: always()
         run: |

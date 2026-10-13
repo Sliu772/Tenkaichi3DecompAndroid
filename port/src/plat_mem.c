@@ -10,6 +10,12 @@
  *   0x10000000, 0x12000000  hardware registers (timers, DMA, GS): plain memory here, so reads give what was last
  *                           written (0 at start: "transfer finished").
  *   0x70000000              the 16 KB scratchpad.
+ *
+ * iOS (port/tools/p32rebase.py): the game's 4-byte pointers are OFFSETS from the image's Mach-O header, because the
+ * low 4 GB belong to __PAGEZERO. Nothing of the PS2's address map exists there. Heap, the port's low arena and the
+ * game's stack are ONE block inside [header, header + 4 GB), above the image (Ios_MapWindow, plat_ios.c); Port_Malloc
+ * and friends hand the game real addresses (the conversion to offsets is done at the call), the integers this file
+ * deals in (sHeapNext, Port_GameBigAlloc) are offsets. The registers are arrays in the engine (as on Android).
  */
 #include "port_host.h"
 /* The 64-bit builds (x86-64 PC, arm64 Android): the game's pointers stay 4 bytes (port/tools/ptr32.py), so all of
@@ -212,9 +218,48 @@ static void map(uint32_t addr, uint32_t size, const char *what) {
     }
 }
 
+#ifdef __APPLE__
+/* ---- iOS: the game's memory window.
+   [heap 32 MB][low arena 192 MB][stack 16 MB], in one block that Ios_MapWindow finds above the image. */
+#pragma clang diagnostic ignored "-Wunused-function"
+#include <mach-o/dyld.h>
+extern void *Ios_MapWindow(uint64_t size); /* plat_ios.c */
+#define IOS_HEAP_SIZE 0x02000000u
+#define IOS_LOW_SIZE 0x0C000000u /* (= LOW_ARENA_SIZE below) */
+#define IOS_STACK_SIZE 0x01000000u
+#define IOS_WIN_SIZE (IOS_HEAP_SIZE + IOS_LOW_SIZE + IOS_STACK_SIZE)
+PORT_HOST static uint8_t *sIosWin; /* (where the window is: not game state) */
+
+static uint8_t *ios_window(void) {
+    if (sIosWin == NULL) {
+        sIosWin = Ios_MapWindow(IOS_WIN_SIZE);
+        if (sIosWin == NULL) {
+            fprintf(stderr, "bt3: no room in [header, header + 4 GB) for the game's memory (%u MB)\n", IOS_WIN_SIZE >> 20);
+            exit(2);
+        }
+        /* a page nobody may touch under the stack: running out of stack ends in the crash report, not in the arena */
+        mprotect(sIosWin + IOS_HEAP_SIZE + IOS_LOW_SIZE, 0x4000, PROT_NONE);
+        fprintf(stderr, "bt3: game memory window at offset 0x%llx (%u MB: heap, low arena, stack)\n",
+                (unsigned long long)((uintptr_t)sIosWin - PORT_BASE), IOS_WIN_SIZE >> 20);
+    }
+    return sIosWin;
+}
+
+/* The registers the game addresses at 0x10000000 / 0x12000000 (irfix.py points it here; there is no such address). */
+uint8_t gPortHwRegs[0x10000] __attribute__((aligned(65536)));
+uint8_t gPortGsRegs[0x2000] __attribute__((aligned(65536)));
+
+static void map_heap(void) {
+    uint32_t base = (uint32_t)((uintptr_t)ios_window() - PORT_BASE);
+
+    sHeapNext = base + (HEAP_FIRST - HEAP_BASE);
+    sHeapEnd = base + (HEAP_END - HEAP_BASE);
+}
+#else
 static void map_heap(void) {
     map(HEAP_BASE, HEAP_END - HEAP_BASE, "the game heap");
 }
+#endif
 
 #if PORT_LP64
 /* The 64-bit build: the game's pointers are still 4 bytes wide (port/tools/ptr32.py), so everything the game can
@@ -261,6 +306,7 @@ PORT_HOST static char **sArgv = NULL;
 /* Where the game's own part of the thread's stack ends: above this frame lie the thread library's own data for
    the thread (its control block and thread-local variables are at the top of the stack it was given, among them
    the C library's per-thread memory cache). Saving and restoring the game's state must leave those alone. */
+#ifndef __APPLE__
 static void *game_thread(void *arg) {
     (void)arg;
     sGameStackTop = (uint8_t *)__builtin_frame_address(0);
@@ -283,6 +329,29 @@ int __wrap_main(int argc, char **argv) {
     pthread_join(th, NULL);
     return sResult;
 }
+#else
+/* iOS: SDL's UIKit entry calls the game's main on the MAIN thread, and everything SDL does with the window has to stay
+   there. So the game does not get a thread of its own: this switches the stack pointer to the stack in the window (the
+   game stores addresses of its locals, which must be offsets from the header) and runs the game on it, as the Windows
+   build does. x29 keeps the old stack pointer across the call. */
+extern void Port_CallOnStack(void (*fn)(void), void *top);
+__asm__(".text\n.globl _Port_CallOnStack\n.p2align 2\n_Port_CallOnStack:\n"
+        "    stp x29, x30, [sp, #-16]!\n    mov x29, sp\n    mov sp, x1\n    blr x0\n    mov sp, x29\n    ldp x29, x30, [sp], #16\n    ret\n");
+
+static void game_main(void) {
+    sGameStackTop = (uint8_t *)__builtin_frame_address(0);
+    gPortStage = "the game is running (on its own stack in the window)";
+    /* (argv: the game does not use it, and the process's own argv is not inside the window) */
+    sResult = __real_main(sArgc, NULL);
+}
+
+int __wrap_main(int argc, char **argv) {
+    sArgc = argc;
+    (void)argv;
+    Port_CallOnStack(game_main, ios_window() + IOS_WIN_SIZE); /* (16-byte aligned: the block is) */
+    return sResult;
+}
+#endif
 #endif
 #endif
 
@@ -335,9 +404,18 @@ static void Port_LoadGameData(void) {
     uint32_t count, i, k;
     /* Android: the engine may have been loaded elsewhere than it was linked (android/.../loader.c), and the list has
        the linked addresses */
+#ifdef __APPLE__
+    long bias = (long)PORT_BASE; /* bt3.dat holds OFFSETS from the header (ios_link.py write_data_list) */
+    uint32_t exeSize = (uint32_t)sizeof(exe) - 1;
+    long n = getenv("BT3_EXE") != NULL ? (long)snprintf(exe, sizeof(exe), "%s", getenv("BT3_EXE"))
+                                       : (_NSGetExecutablePath(exe, &exeSize) == 0 ? (long)strlen(exe) : 0L);
+#else
     long bias = getenv("BT3_ENGINE_BIAS") != NULL ? atol(getenv("BT3_ENGINE_BIAS")) : 0;
+#endif
 #ifdef _WIN32
     long n = (long)GetModuleFileNameA(NULL, exe, sizeof(exe) - 1);
+#elif defined(__APPLE__)
+    /* (n: above) */
 #else
     long n = getenv("BT3_EXE") != NULL ? (long)snprintf(exe, sizeof(exe), "%s", getenv("BT3_EXE"))
                                         : (long)readlink("/proc/self/exe", exe, sizeof(exe) - 1);
@@ -490,7 +568,7 @@ void Port_LowFree(void *addr);
    (the 32-bit program, whose blocks are the C library's and cannot be told from the heap's by address). */
 unsigned Port_GameBigAlloc(int size) {
 #if PORT_LP64
-    return (unsigned)(uintptr_t)Port_LowAlloc((size_t)size);
+    return Port_P2A(Port_LowAlloc((size_t)size));
 #else
     (void)size;
     return 0;
@@ -500,8 +578,8 @@ unsigned Port_GameBigAlloc(int size) {
 /* 1 if `addr` was such a block (it is given back); 0: it is the game heap's (Heap_Free goes on). */
 int Port_GameBigFree(unsigned addr) {
 #if PORT_LP64
-    if (sLowArena != NULL && addr >= (unsigned)(uintptr_t)sLowArena && addr - (unsigned)(uintptr_t)sLowArena < LOW_ARENA_SIZE) {
-        Port_LowFree((void *)(uintptr_t)addr);
+    if (sLowArena != NULL && addr >= Port_P2A(sLowArena) && addr - Port_P2A(sLowArena) < LOW_ARENA_SIZE) {
+        Port_LowFree(Port_A2P(addr));
         return 1;
     }
 #else
@@ -534,7 +612,7 @@ uint8_t *Port_GameStackTop(void) {
 
 /* Where the game's heap is in this process (at its PS2 address unless that was taken) and how large. */
 void Port_HeapRegion(uint8_t **base, uint32_t *size) {
-    *base = (uint8_t *)(uintptr_t)(sHeapEnd - (HEAP_END - HEAP_BASE));
+    *base = (uint8_t *)Port_A2P(sHeapEnd - (HEAP_END - HEAP_BASE));
     *size = HEAP_END - HEAP_BASE;
 }
 
@@ -570,7 +648,9 @@ __attribute__((constructor)) static void Port_MapMemory(void) {
     mallopt(M_MMAP_MAX, 0);
     mallopt(M_ARENA_MAX, 1);
 #endif
-#ifdef __ANDROID__
+#ifdef __APPLE__
+    ios_window(); /* heap, low arena and the game's stack, in [header, header + 4 GB) */
+#elif defined(__ANDROID__)
     {   /* the stack: at its usual place, or anywhere free below 4 GB */
         void *p = mmap((void *)(uintptr_t)STACK_BASE, STACK_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | fixed_flag(STACK_BASE, STACK_SIZE),
                        -1, 0);
@@ -604,7 +684,7 @@ __attribute__((constructor)) static void Port_MapMemory(void) {
     low_region_take();
 #endif
     map_heap();
-#ifndef __ANDROID__ /* (Android: arrays in the engine, above) */
+#if !defined(__ANDROID__) && !defined(__APPLE__) /* (Android, iOS: arrays in the engine, above) */
     map(0x10000000u, 0x10000, "the hardware registers");
     map(0x12000000u, 0x2000, "the GS registers");
 #endif
@@ -617,6 +697,8 @@ __attribute__((constructor)) static void Port_MapMemory(void) {
     } else {
         gPortScratchpadMapped = 1;
     }
+#elif defined(__APPLE__)
+    /* iOS: there is no address 0x70000000 to map (the game addresses nothing there, see Android) */
 #else
     map(0x70000000u, 0x4000, "the scratchpad");
     gPortScratchpadMapped = 1;
@@ -633,7 +715,7 @@ void *Port_Malloc(uint32_t size) {
         exit(2);
     }
     sHeapNext = p + size;
-    return (void *)(uintptr_t)p;
+    return Port_A2P(p);
 }
 
 /* Memory the port hands to the game by address (file handles, the "second processor's" memory): zeroed, and below
@@ -644,7 +726,9 @@ void *Port_Malloc(uint32_t size) {
    address and before any state is saved: a state restored to before the region existed would otherwise take it a
    second time, somewhere else. */
 static void low_region_take(void) {
-#ifdef _WIN32
+#ifdef __APPLE__
+        sLowArena = ios_window() + IOS_HEAP_SIZE; /* already mapped, with the heap and the stack */
+#elif defined(_WIN32)
         /* address space only (reserved); pages are committed as the region is used, below */
         sLowArena = VirtualAlloc((void *)(uintptr_t)LOW_ARENA_BASE, LOW_ARENA_SIZE, MEM_RESERVE | MEM_WRITE_WATCH, PAGE_READWRITE);
         if (sLowArena == NULL) {

@@ -28,6 +28,7 @@
  * interpolation and its reverb (none is set up by these banks). The overall loudness against the music is by
  * ear (SE_GAIN) until it is compared with the console.
  */
+#include "../port_host.h" /* Port_A2P / Port_P2A: the game's 4-byte addresses (offsets from the header on iOS) */
 #include <SDL3/SDL.h>
 #include <math.h>
 #include <stdint.h>
@@ -433,7 +434,7 @@ uint32_t sceSifSetDma(SifDmaData *d, int count) {
 
     for (i = 0; i < count; i++) {
         if (d[i].addr != 0 && d[i].data != 0 && d[i].size > 0) {
-            memcpy((void *)(uintptr_t)d[i].addr, (void *)(uintptr_t)d[i].data, (size_t)d[i].size);
+            memcpy(Port_A2P(d[i].addr), Port_A2P(d[i].data), (size_t)d[i].size);
         }
     }
     return 1;
@@ -474,8 +475,8 @@ int sceSifCallRpc(void *client, int fno, int mode, void *send, int sendSize, voi
         if (slot >= 0) {
             sBanks[slot].set = 1;
             sBanks[slot].spu = (uint32_t)w[1];
-            sBanks[slot].hd = (const uint8_t *)(uintptr_t)(uint32_t)w[2];
-            sBanks[slot].sq = (const uint8_t *)(uintptr_t)(uint32_t)w[3];
+            sBanks[slot].hd = (const uint8_t *)Port_A2P((uint32_t)w[2]);
+            sBanks[slot].sq = (const uint8_t *)Port_A2P((uint32_t)w[3]);
             sBanks[slot].paused = 0;
             if (sBanks[slot].volume == 0.0f) { sBanks[slot].volume = 1.0f; }
             voice_own_bank(slot);

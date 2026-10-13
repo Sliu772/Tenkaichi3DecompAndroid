@@ -87,6 +87,9 @@ def strip_availability(text):
 
 _SECTION = re.compile(r"^\s*\.section\s+\.(?:data|bss|rodata|sdata|sbss)\b.*$")
 _GLOBL = re.compile(r"^(\s*\.globl\s+)(\S+)\s*$")
+# Symbols that are PS2 addresses used as numbers (p32rebase.FIXED): a table entry that points at one holds the number.
+FIXED_ADDRESSES = {"D_3BE71C": 0x3BE71C}
+
 _LABEL = re.compile(r"^([A-Za-z_$][\w.$]*):\s*$")
 _LONG = re.compile(r"^(\s*\.(?:long|word|4byte)\s+)([A-Za-z_$][\w.$]*)(.*)$")
 
@@ -106,6 +109,9 @@ def macho_asm(text):
             out.append(f"_{m.group(1)}:")
             continue
         m = _LONG.match(line)
+        if m and m.group(2) in FIXED_ADDRESSES and not m.group(3).strip():
+            out.append(f"{m.group(1)}{FIXED_ADDRESSES[m.group(2)]}")
+            continue
         if m:
             # a 4-byte pointer in a table = offset from the image header (p32rebase.py): the linker resolves the difference
             out.append(f"{m.group(1)}_{m.group(2)}{m.group(3)} - __mh_execute_header")

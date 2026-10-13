@@ -11,7 +11,15 @@
 #include "imgui_internal.h" // (ClearActiveID: a finger drag over a button scrolls the window)
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlgpu3.h"
+#ifdef __APPLE__
+/* iOS: there is no OpenGL back end (gs_gl.c is not built, imgui_impl_opengl3.cpp neither): SDL_GPU only. These stand in
+   so that the one code path below links; Ui_Init fails if it is ever asked for the GL context, and sGL stays 0. */
+static bool ImGui_ImplOpenGL3_Init(const char *) { return false; }
+static void ImGui_ImplOpenGL3_NewFrame() {}
+static void ImGui_ImplOpenGL3_RenderDrawData(ImDrawData *) {}
+#else
 #include "imgui_impl_opengl3.h"
+#endif
 #include "ui.h"
 #include "namefont.h"
 #ifdef __ANDROID__

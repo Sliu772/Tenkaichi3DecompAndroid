@@ -151,6 +151,9 @@ def main():
              "extern long write(int, const void *, unsigned long);", "extern unsigned long strlen(const char *);", "extern void abort(void);",
              'static void missing(const char *n) { write(2, "bt3: not implemented yet: ", 26); write(2, n, strlen(n)); write(2, "\\n", 1); abort(); }']
     lines += [f'void {s}(void) {{ missing("{s}"); }}' for s in need]
+    dataish = [s for s in need if re.fullmatch(r"D_[0-9A-Fa-f]+|g[A-Z]\w*|s[A-Z][a-z]\w*|_end|__data_start", s)]
+    if dataish:  # a stub is CODE: a variable that ends up here is read as instructions
+        print(f"warning: {len(dataish)} stubbed names look like DATA (they need a definition, not a stub):", *dataish[:40], sep="\n  ")
     (GEN / "stubs.c").write_text("\n".join(lines) + "\n")
     (OUT / "stubs.txt").write_text("\n".join(need) + "\n")
     extra = []
