@@ -222,6 +222,7 @@ static void find_moltenvk(void) {
    watchdog, or for memory: no signal, so no crash report), the last lines say where it was and how large it had grown.
    Only system calls and write(): the game thread is stopped for a moment and may hold a lock of the C library. */
 static mach_port_t sGameThread;
+extern unsigned gSpuHeapBlocks[]; /* the game's SPU heap table (src/sys/spu_heap.c): 17 x {state, addr, size} */
 
 static void hb_hex(char *out, unsigned long long v) {
     int i;
@@ -275,6 +276,38 @@ static void *heartbeat(void *arg) {
         }
         hb_dec(line + 91, mb);
         if (write(2, line, strlen(line)) < 0) {
+        }
+        if (ok) { /* where a loop stands: the registers, and the SPU heap table when the game is inside SpuHeap_* */
+            char rl[400];
+            size_t n = 0;
+            int r, w;
+            static const int regs[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 19, 20, 21, 22, 23, 24};
+            memcpy(rl, "bt3 regs x0-12,x19-24", 21);
+            n = 21;
+            for (r = 0; r < (int)(sizeof(regs) / sizeof(regs[0])); r++) {
+                rl[n++] = ' ';
+                hb_hex(rl + n, (unsigned long long)st.__x[regs[r]]);
+                n += 16;
+            }
+            rl[n++] = '\n';
+            if (write(2, rl, n) < 0) {
+            }
+            if (pc >= 0x314E08ULL && pc < 0x3152F8ULL) {
+                char tl[1100];
+                const unsigned *t = gSpuHeapBlocks; /* 17 x {state, addr, size} */
+                memcpy(tl, "bt3 spu ", 8);
+                n = 8;
+                for (w = 0; w < 17 * 3; w++) {
+                    char h[16];
+                    tl[n++] = (w % 3 == 0) ? '|' : ' ';
+                    hb_hex(h, (unsigned long long)t[w]);
+                    memcpy(tl + n, h + 8, 8); /* a 32-bit word: the low 8 of the 16 digits */
+                    n += 8;
+                }
+                tl[n++] = '\n';
+                if (write(2, tl, n) < 0) {
+                }
+            }
         }
     }
     return NULL;

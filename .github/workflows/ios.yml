@@ -192,6 +192,15 @@ jobs:
               echo
             done; } > callback_disasm.txt || true
           wc -l callback_disasm.txt
+      - name: Disassemble the SPU heap and the sound bank setup
+        if: always()
+        run: |
+          { for f in SpuHeap_Alloc SpuHeap_FindBlock SpuHeap_Init Snd_SetupBank Snd_LoadBank Snd_LoadBankFile Mem_Align16Pad IopHeap_Alloc; do
+              echo "== $f =="
+              awk -v s="^_${f}:" '$0 ~ s {p=1; print; next} p && /^_[A-Za-z0-9_.$]+:/ {p=0} p' full_disasm.txt
+              echo
+            done; } > spu_disasm.txt || true
+          wc -l spu_disasm.txt
       - name: Summary
         if: always()
         run: |
@@ -209,6 +218,7 @@ jobs:
             link.log
             heap_disasm.txt
             callback_disasm.txt
+            spu_disasm.txt
             port/build/ios/stubs.txt
             port/build/ios/bt3.map
       - uses: actions/upload-artifact@v4
