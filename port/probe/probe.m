@@ -79,7 +79,7 @@ static void run(void) {
     [self.view addSubview:t];
 }
 @end
-@interface AD : UIResponder <UIApplicationDelegate> @property UIWindow *window; @end
+@interface AD : UIResponder <UIApplicationDelegate> @property (nonatomic, strong) UIWindow *window; @end
 @implementation AD
 - (BOOL)application:(UIApplication *)a didFinishLaunchingWithOptions:(NSDictionary *)o {
     self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
