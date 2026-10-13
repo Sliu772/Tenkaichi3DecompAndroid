@@ -429,6 +429,13 @@ static void start_heartbeat(void) {
 
 static int game_entry(int argc, char *argv[]) {
     fprintf(stderr, "bt3 iOS: SDL started the app, calling the game\n");
+    /* A release program (gPortDataStripped == 1, set by the packaging step) turns the GS renderer on by itself;
+       this build is not post-processed, so without BT3_GS the game ran with no window and no picture (bt3 logs
+       52-57: no "bt3: display" / GPU line, black screen). The default back end is Vulkan (MoltenVK). */
+    if (getenv("BT3_GS") == NULL) {
+        setenv("BT3_GS", "gpu", 1);
+    }
+    fprintf(stderr, "bt3 iOS: BT3_GS=%s\n", getenv("BT3_GS"));
     start_heartbeat();
     ios_prepare_data(); /* no gamedata yet: unpack the .iso the user copied into Documents (shows its progress) */
     find_moltenvk();
