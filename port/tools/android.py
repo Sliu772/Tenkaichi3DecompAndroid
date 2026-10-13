@@ -87,7 +87,7 @@ def compile_ee(cmd, src, o, game_text=True):
         return r
     i = pathlib.Path(str(o)[:-2] + ".i")
     # (Apple's headers: availability attributes hold version numbers that eeconst would turn into hex floats)
-    i.write_text(eeconst.transform(ios_pp.strip_availability(r.stdout) if IOS else r.stdout))
+    i.write_text(eeconst.transform(ios_pp.asm_labels(ios_pp.strip_availability(r.stdout)) if IOS else r.stdout))
     std = next((a for a in cmd if a.startswith("-std=")), "-std=gnu89")
     if game_text:
         try:

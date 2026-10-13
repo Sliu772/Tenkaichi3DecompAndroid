@@ -112,3 +112,15 @@ def macho_asm(text):
             continue
         out.append(line)
     return "\n".join(out) + "\n"
+
+
+# `extern int f_(int) __asm__("f");` names the symbol f. ELF uses the label as written; Mach-O symbols of C names have a
+# leading underscore and clang uses an asm label VERBATIM, so the reference would be to `f` while the definition of f is
+# `_f`. The label is a declaration's suffix (after `)` / an identifier / `]`); inline assembler is a statement
+# (`__asm__("nop");` after `;` `{` `}`), which this leaves alone.
+_ASM_LABEL = re.compile(r'(?<=[\w)\]])(\s*)(__asm__|__asm|asm)(\s*)\(\s*"([A-Za-z_][\w$]*)"\s*\)')
+
+
+def asm_labels(text):
+    """Preprocessed text with the underscore Mach-O wants added to every asm label of a declaration."""
+    return _ASM_LABEL.sub(lambda m: f'{m.group(1)}{m.group(2)}{m.group(3)}("_{m.group(4)}")', text)

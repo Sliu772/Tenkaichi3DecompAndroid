@@ -62,6 +62,12 @@ def undefined(stderr):
     return sorted(names)
 
 
+def bare_undefined(stderr):
+    """Undefined names WITHOUT ld64's leading underscore: a reference made through an asm label (`__asm__("name")`) that
+    ios_pp.asm_labels did not cover. A stub cannot stand in for them, they have to be fixed at the source of the object."""
+    return sorted({m.group(1) for m in re.finditer(r'^\s+"([A-Za-z][^"]*)", referenced from:', stderr, re.M)})
+
+
 def symbols():
     """name (no underscore) -> offset from the image's header, for every symbol of the executable (nm -n)."""
     out = sh(["xcrun", "nm", "-n", EXE]).stdout
@@ -131,6 +137,11 @@ def main():
     if not objs:
         raise SystemExit(f"no objects in {OBJ}: run `BT3_PLATFORM=ios python3 port/tools/android.py compile` first")
     r = sh(link_cmd(objs, []))
+    bare = bare_undefined(r.stderr)
+    if bare:
+        print(f"{len(bare)} undefined names without a leading underscore (asm labels); first ones:", *bare[:30], sep="\n  ")
+        print(r.stderr[:2500])
+        return 1
     need = undefined(r.stderr)
     if r.returncode and not need:
         print(r.stderr[-3000:])
