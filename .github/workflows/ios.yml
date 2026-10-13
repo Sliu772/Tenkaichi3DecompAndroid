@@ -195,7 +195,7 @@ jobs:
       - name: Disassemble the SPU heap and the sound bank setup
         if: always()
         run: |
-          { for f in SpuHeap_Alloc SpuHeap_FindBlock SpuHeap_Init Snd_SetupBank Snd_LoadBank Snd_LoadBankFile Mem_Align16Pad IopHeap_Alloc; do
+          { for f in EftChar_Init EftCharRoot_Init BtlTask_CreateChildList BtlTask_AddAfter BtlTaskList_AddFirst BtlPool_Alloc BtlPool_GetCurrent EftChar_SetPool; do
               echo "== $f =="
               awk -v s="^_${f}:" '$0 ~ s {p=1; print; next} p && /^_[A-Za-z0-9_.$]+:/ {p=0} p' full_disasm.txt
               echo
