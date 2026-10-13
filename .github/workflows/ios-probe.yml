@@ -1,0 +1,17 @@
+name: iOS Probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios-prototype]
+    paths: ["port/probe/**", ".github/workflows/ios-probe.yml"]
+jobs:
+  probe:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build both variants
+        run: |
+          sh port/probe/build.sh probe-default
+          sh port/probe/build.sh probe-pagezero -Wl,-pagezero_size,0x4000 2>&1 | tee pz.log
+      - uses: actions/upload-artifact@v4
+        with: { name: probe-ipas, path: port/build/probe/*.ipa }
