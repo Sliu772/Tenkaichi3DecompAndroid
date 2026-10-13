@@ -99,7 +99,8 @@ void *Ios_MapWindow(uint64_t size) {
 }
 
 /* Bring-up, two layers:
-   1. A fault whose address is a game OFFSET used as a raw pointer (below 4 GB, inside the game window): the register
+   1. A fault whose address is a game OFFSET used as a raw pointer (below 4 GB, from 0x100000 up, which covers the static
+      buffers in .bss at 0x46xxxx): the register
       that holds it gets the header added and the instruction is retried ("FIXRAW"). The same bug class as the ABI
       mismatches (an offset where a host pointer belongs), healed on the spot and logged with its call chain.
    2. Any other fault inside the game's code is logged and its instruction skipped ("SKIP"); a load leaves its
@@ -135,7 +136,7 @@ static int skip_fault(int sig, siginfo_t *si, ucontext_t *uc) {
     if (fa < 0x100000000ULL) {
         for (k = 0; k < 29; k++) {
             uint64_t r = ss->__x[k];
-            if (r >= 0x1000000ULL && r < 0x20000000ULL && fa >= r && fa - r < 0x10000ULL) {
+            if (r >= 0x100000ULL && r < 0x20000000ULL && fa >= r && fa - r < 0x10000ULL) {
                 ss->__x[k] = r + (uint64_t)lo;
                 fixed++;
             }
