@@ -222,12 +222,21 @@ static void find_moltenvk(void) {
    watchdog, or for memory: no signal, so no crash report), the last lines say where it was and how large it had grown.
    Only system calls and write(): the game thread is stopped for a moment and may hold a lock of the C library. */
 static mach_port_t sGameThread;
+extern unsigned gSndMgr; /* the game's sound manager (src/sys/snd.c), a 4-byte pointer: offset from the header */
+extern void SpuHeap_FindBlock(void);
 extern unsigned gSpuHeapBlocks[]; /* the game's SPU heap table (src/sys/spu_heap.c): 17 x {state, addr, size} */
 
 static void hb_hex(char *out, unsigned long long v) {
     int i;
     for (i = 0; i < 16; i++) {
         out[i] = "0123456789abcdef"[(v >> (60 - i * 4)) & 15];
+    }
+}
+
+static void hb_hex32(char *out, unsigned v) { /* 8 digits */
+    int i;
+    for (i = 0; i < 8; i++) {
+        out[i] = "0123456789abcdef"[(v >> (28 - i * 4)) & 15];
     }
 }
 
@@ -292,7 +301,9 @@ static void *heartbeat(void *arg) {
             rl[n++] = '\n';
             if (write(2, rl, n) < 0) {
             }
-            if (pc >= 0x314E08ULL && pc < 0x3152F8ULL) {
+            /* inside SpuHeap_FindBlock .. SpuHeap_Alloc (they follow each other; the addresses move with every build) */
+            if (pc >= (unsigned long long)(uintptr_t)&SpuHeap_FindBlock - base &&
+                pc < (unsigned long long)(uintptr_t)&SpuHeap_FindBlock - base + 0x600ULL) {
                 char tl[1100];
                 const unsigned *t = gSpuHeapBlocks; /* 17 x {state, addr, size} */
                 memcpy(tl, "bt3 spu ", 8);
@@ -306,6 +317,26 @@ static void *heartbeat(void *arg) {
                 }
                 tl[n++] = '\n';
                 if (write(2, tl, n) < 0) {
+                }
+                if (gSndMgr != 0) { /* the 8 sound bank slots: {spuAddr, bodySize, hdSize, seqSize, spuSize, pending} */
+                    char bl[8 * 54 + 16];
+                    const unsigned char *m = (const unsigned char *)(base + gSndMgr);
+                    int bk, f;
+                    static const int fld[] = {0x00, 0x18, 0x1C, 0x20, 0x24, 0x30};
+                    memcpy(bl, "bt3 snd ", 8);
+                    n = 8;
+                    for (bk = 0; bk < 8; bk++) {
+                        bl[n++] = '|';
+                        for (f = 0; f < 6; f++) {
+                            hb_hex32(bl + n, *(const unsigned *)(m + bk * 0x4C + fld[f]));
+                            n += 8;
+                            bl[n++] = f < 5 ? ' ' : '|';
+                            if (f == 5) n--;
+                        }
+                    }
+                    bl[n++] = '\n';
+                    if (write(2, bl, n) < 0) {
+                    }
                 }
             }
         }
