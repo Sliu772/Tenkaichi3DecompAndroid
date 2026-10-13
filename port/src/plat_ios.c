@@ -106,6 +106,33 @@ static void crash(int sig, siginfo_t *si, void *ctx) {
             (unsigned long long)(__darwin_arm_thread_state64_get_pc(uc->uc_mcontext->__ss) - hdr()),
             (unsigned long long)__darwin_arm_thread_state64_get_lr(uc->uc_mcontext->__ss),
             (unsigned long long)__darwin_arm_thread_state64_get_sp(uc->uc_mcontext->__ss));
+    {
+        /* backtrace() below runs on the signal's own stack and says nothing about the faulting code, so also: the
+           argument registers, the frame-pointer chain and the stack words that point into the game's image (return
+           addresses, as offsets for bt3.map: address in the map = 0x100000000 + offset). */
+        const __darwin_arm_thread_state64_t *ss = &uc->uc_mcontext->__ss;
+        uintptr_t lo = hdr(), hi = hdr() + (uintptr_t)image_end();
+        uintptr_t sp = (uintptr_t)__darwin_arm_thread_state64_get_sp(*ss);
+        uintptr_t fp = (uintptr_t)__darwin_arm_thread_state64_get_fp(*ss);
+        uintptr_t *w;
+        int k, shown = 0;
+
+        fprintf(stderr, "regs: x0 0x%llx x1 0x%llx x2 0x%llx x3 0x%llx x19 0x%llx x20 0x%llx x21 0x%llx fp 0x%llx\n",
+                (unsigned long long)ss->__x[0], (unsigned long long)ss->__x[1], (unsigned long long)ss->__x[2],
+                (unsigned long long)ss->__x[3], (unsigned long long)ss->__x[19], (unsigned long long)ss->__x[20],
+                (unsigned long long)ss->__x[21], (unsigned long long)fp);
+        for (k = 0; k < 24 && fp != 0 && (fp & 7) == 0 && fp >= sp && fp - sp < 0x100000; k++) {
+            uintptr_t ra = ((uintptr_t *)fp)[1];
+            fprintf(stderr, "fp chain %d: ra 0x%llx%s 0x%llx\n", k, (unsigned long long)ra, ra >= lo && ra < hi ? " game offset" : "", (unsigned long long)(ra - lo));
+            fp = ((uintptr_t *)fp)[0];
+        }
+        for (w = (uintptr_t *)(sp & ~(uintptr_t)7); (uintptr_t)w < sp + 0x2000 && shown < 40; w++) {
+            if (*w >= lo && *w < hi && (*w & 3) == 0) {
+                fprintf(stderr, "stack +0x%llx: game offset 0x%llx\n", (unsigned long long)((uintptr_t)w - sp), (unsigned long long)(*w - lo));
+                shown++;
+            }
+        }
+    }
     n = backtrace(bt, 48);
     fflush(stderr);
     backtrace_symbols_fd(bt, n, 2);
