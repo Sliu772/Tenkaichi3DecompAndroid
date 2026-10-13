@@ -936,7 +936,7 @@ static void vk_frame_end(void) {
 
     (void)ev;
     poll_events();
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(__APPLE__) /* (iOS: the same heartbeat in bt3_log.txt) */
     if (gGsFrame % 300 == 0) { /* a heartbeat in the log (adb logcat -s bt3): is the game running, and drawing? */
         extern unsigned gPortVBlanks;
         static uint64_t lastNs;
