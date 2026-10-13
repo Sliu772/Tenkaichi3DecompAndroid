@@ -98,43 +98,62 @@ void *Ios_MapWindow(uint64_t size) {
     return NULL;
 }
 
-/* Bring-up: a fault inside the game's code is logged and its instruction skipped, so one run shows many bugs
-   instead of one. A load leaves its register as it was. Gives up (full dump below) after 400 skips in total or 4
-   at the same pc. */
+/* Bring-up, two layers:
+   1. A fault whose address is a game OFFSET used as a raw pointer (below 4 GB, inside the game window): the register
+      that holds it gets the header added and the instruction is retried ("FIXRAW"). The same bug class as the ABI
+      mismatches (an offset where a host pointer belongs), healed on the spot and logged with its call chain.
+   2. Any other fault inside the game's code is logged and its instruction skipped ("SKIP"); a load leaves its
+      register as it was.
+   Gives up (full dump) after 5000 recoveries in total or 200 at the same pc. Only the first 3 per pc are logged. */
 static int skip_fault(int sig, siginfo_t *si, ucontext_t *uc) {
     static int total;
-    static uintptr_t seen[64];
-    static int cnt[64];
+    static uintptr_t seen[256];
+    static int cnt[256];
     __typeof__(uc->uc_mcontext->__ss) *ss = &uc->uc_mcontext->__ss;
     uintptr_t pc = (uintptr_t)__darwin_arm_thread_state64_get_pc(*ss);
     uintptr_t lr = (uintptr_t)__darwin_arm_thread_state64_get_lr(*ss);
     uintptr_t lo = hdr(), hi = hdr() + (uintptr_t)image_end();
     uintptr_t fp = (uintptr_t)__darwin_arm_thread_state64_get_fp(*ss);
     uintptr_t sp = (uintptr_t)__darwin_arm_thread_state64_get_sp(*ss);
-    int i, k;
+    uint64_t fa = (uint64_t)(uintptr_t)si->si_addr;
+    int i, k, fixed = 0, loud;
 
-    if ((sig != SIGSEGV && sig != SIGBUS) || pc < lo || pc >= hi || total >= 400) {
+    if ((sig != SIGSEGV && sig != SIGBUS) || pc < lo || pc >= hi || total >= 5000) {
         return 0;
     }
-    for (i = 0; i < 64 && seen[i] != 0 && seen[i] != pc; i++) {
+    for (i = 0; i < 256 && seen[i] != 0 && seen[i] != pc; i++) {
     }
-    if (i == 64) {
+    if (i == 256) {
         return 0;
     }
     seen[i] = pc;
-    if (++cnt[i] > 4) {
+    if (++cnt[i] > 200) {
         return 0;
     }
     total++;
-    fprintf(stderr, "bt3 SKIP #%d: signal %d addr %p pc offset 0x%llx lr offset 0x%llx chain:", total, sig, si->si_addr,
-            (unsigned long long)(pc - lo), (unsigned long long)(lr - lo));
-    for (k = 0; k < 8 && fp != 0 && (fp & 7) == 0 && fp >= sp && fp - sp < 0x100000; k++) {
-        uintptr_t ra = ((uintptr_t *)fp)[1];
-        fprintf(stderr, " 0x%llx", (unsigned long long)(ra - lo));
-        fp = ((uintptr_t *)fp)[0];
+    loud = cnt[i] <= 3;
+    if (fa < 0x100000000ULL) {
+        for (k = 0; k < 29; k++) {
+            uint64_t r = ss->__x[k];
+            if (r >= 0x1000000ULL && r < 0x20000000ULL && fa >= r && fa - r < 0x10000ULL) {
+                ss->__x[k] = r + (uint64_t)lo;
+                fixed++;
+            }
+        }
     }
-    fprintf(stderr, "\n");
-    __darwin_arm_thread_state64_set_pc_fptr(*ss, (void *)(pc + 4));
+    if (loud) {
+        fprintf(stderr, "bt3 %s #%d: signal %d addr %p pc offset 0x%llx lr offset 0x%llx chain:", fixed ? "FIXRAW" : "SKIP", total,
+                sig, si->si_addr, (unsigned long long)(pc - lo), (unsigned long long)(lr - lo));
+        for (k = 0; k < 8 && fp != 0 && (fp & 7) == 0 && fp >= sp && fp - sp < 0x100000; k++) {
+            uintptr_t ra = ((uintptr_t *)fp)[1];
+            fprintf(stderr, " 0x%llx", (unsigned long long)(ra - lo));
+            fp = ((uintptr_t *)fp)[0];
+        }
+        fprintf(stderr, "\n");
+    }
+    if (!fixed) {
+        __darwin_arm_thread_state64_set_pc_fptr(*ss, (void *)(pc + 4));
+    }
     return 1;
 }
 
