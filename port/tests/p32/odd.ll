@@ -9,3 +9,15 @@ define i32 @odd() {
   %c = add i32 %a, %b
   ret i32 %c
 }
+; the form that broke gfxm_b_c / gsc: a 4-byte null constant converted inside a phi
+define ptr @phinull(i1 %c, ptr %q) {
+entry:
+  br i1 %c, label %a, label %b
+a:
+  br label %m
+b:
+  br label %m
+m:
+  %r = phi ptr [ %q, %a ], [ addrspacecast (ptr addrspace(271) null to ptr), %b ]
+  ret ptr %r
+}

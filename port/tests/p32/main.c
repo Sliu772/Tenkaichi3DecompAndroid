@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <stddef.h>
 #include <sys/mman.h>
 extern char bt3_hdr[];
 struct N { int v; uint32_t next; };
@@ -9,7 +10,7 @@ extern struct N n1, n2;
 extern uint32_t gHead;
 unsigned sum(unsigned p); void setv(unsigned p, int v); unsigned head(void); unsigned addr(void);
 void fill(unsigned p); unsigned bump(unsigned p); int callf(unsigned f, int x); unsigned fnptr(void);
-int cmpx(unsigned p); int kport(void); int kport2(unsigned q); void kset(void); extern int gArr[64]; void initfn(void);
+int cmpx(unsigned p); int kport(void); int kport2(unsigned q); void kset(void); extern int gArr[64]; void *toport(unsigned); unsigned fromport(void *); void *sel(int, void *); void initfn(void);
 #define OFF(p) ((unsigned)((char *)(p) - bt3_hdr))
 #define PTR(o) ((void *)(bt3_hdr + (o)))
 static int fails;
@@ -35,6 +36,9 @@ int main(void) {
     CHECK(kport() == 10);                             /* constant 4-byte pointer passed to an ordinary-pointer function */
     CHECK(kport2(OFF(&gArr[24])) == 18);              /* computed one */
     kset(); CHECK(gArr[24] == 77);
+    CHECK(toport(0) == NULL && toport(OFF(&gArr[3])) == (void *)&gArr[3]);   /* 4-byte -> ordinary: 0 stays NULL */
+    CHECK(fromport(NULL) == 0 && fromport(&gArr[3]) == OFF(&gArr[3]));
+    CHECK(sel(0, &gArr[1]) == NULL && sel(1, &gArr[1]) == (void *)&gArr[1]);
     printf(fails ? "P32 TEST FAILED\n" : "P32 TEST OK\n");
     return fails != 0;
 }

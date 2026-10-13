@@ -75,16 +75,22 @@ def fold_up(line, anchor, cx, pre):
         assert inner.endswith(" to ptr"), inner
         c = inner[:-len(" to ptr")]
         m = _GEP271.match(c)
-        if c.startswith(CASTC) and c.endswith(" to ptr addrspace(271))") and balanced_end(c, len("addrspacecast ")) == len(c):
+        if c == "null":
+            out.append(line[pos:k] + "null")
+        elif c.startswith(CASTC) and c.endswith(" to ptr addrspace(271))") and balanced_end(c, len("addrspacecast ")) == len(c):
             rep = c[len(CASTC):-len(" to ptr addrspace(271)")]                            # &sym
             out.append(line[pos:k] + rep)
         elif m:
             out.append(line[pos:k] + f"getelementptr inbounds (i8, ptr {m.group(1)}, i64 {m.group(2)})")
         else:
             m = _INTTOPTR.match(c)
-            if m:
+            if m and int(m.group(1)) == 0:
+                out.append(line[pos:k] + "null")
+            elif m:
                 out.append(line[pos:k] + f"getelementptr (i8, ptr @{anchor}, i64 {int(m.group(1)) & 0xffffffff})")
-            else:  # any other constant: hdr + its 32-bit value, with instructions (LLVM 21 has no zext constant expressions)
+            else:
+                if " = phi " in line:
+                    raise RuntimeError("p32rebase: a 4-byte constant of an unknown form inside a phi: " + c[:200])  # any other constant: hdr + its 32-bit value, with instructions (LLVM 21 has no zext constant expressions)
                 out.append(line[pos:k] + cx.to_ptr(c, pre))
         pos = end
     return "".join(out) + line[pos:]
@@ -104,7 +110,10 @@ def fold_consts(line, anchor):
             pos = k + len(CASTC)
             continue
         x = inner[:-len(" to ptr addrspace(271)")]
-        out.append(line[pos:k] + f"inttoptr (i32 {rel(x, anchor)} to ptr addrspace(271))")
+        if x == "null":
+            out.append(line[pos:k] + "null")
+        else:
+            out.append(line[pos:k] + f"inttoptr (i32 {rel(x, anchor)} to ptr addrspace(271))")
         pos = end
     return "".join(out) + line[pos:]
 
@@ -117,13 +126,20 @@ class Ctx:
         self.n += 1
         return f"%rb{self.n}"
 
-    def to_ptr(self, p32, pre):
-        """Emit the instructions that turn the 4-byte pointer p32 (an operand) into an ordinary pointer; returns its name."""
+    def to_ptr(self, p32, pre, nullsafe=False):
+        """Emit the instructions that turn the 4-byte pointer p32 (an operand) into an ordinary pointer; returns its name.
+        nullsafe: 0 stays NULL (a pointer handed to the port, compared there against NULL). The cheap form is for
+        dereferences, where a null 4-byte pointer faulting or not makes no difference."""
         i, z, q = self.tmp(), self.tmp(), self.tmp()
         pre.append(f"  {i} = ptrtoint {OPQ} {p32} to i32")
         pre.append(f"  {z} = zext i32 {i} to i64")
         pre.append(f"  {q} = getelementptr i8, ptr @{self.anchor}, i64 {z}")
-        return q
+        if not nullsafe:
+            return q
+        c, r = self.tmp(), self.tmp()
+        pre.append(f"  {c} = icmp eq i32 {i}, 0")
+        pre.append(f"  {r} = select i1 {c}, ptr null, ptr {q}")
+        return r
 
     def to_p32(self, p64, pre):
         a, b, d, t = self.tmp(), self.tmp(), self.tmp(), self.tmp()
@@ -131,7 +147,10 @@ class Ctx:
         pre.append(f"  {b} = ptrtoint ptr @{self.anchor} to i64")
         pre.append(f"  {d} = sub i64 {a}, {b}")
         pre.append(f"  {t} = trunc i64 {d} to i32")
-        return t
+        c, r = self.tmp(), self.tmp()                      # NULL stays 0
+        pre.append(f"  {c} = icmp eq ptr {p64}, null")
+        pre.append(f"  {r} = select i1 {c}, i32 0, i32 {t}")
+        return r
 
 
 CAST_TO_PTR = re.compile(r'^(\s*%[\w.$-]+ = )addrspacecast ptr addrspace\(271\) (.*) to ptr$')
@@ -158,7 +177,7 @@ def rebase(text, anchor):
         pre = [fold_consts(x, anchor) if CASTC in x else x for x in pre]
         m = CAST_TO_PTR.match(line)
         if m:
-            q = cx.to_ptr(m.group(2), pre)
+            q = cx.to_ptr(m.group(2), pre, nullsafe=not re.match(r"\s*%p32(?:st|fix)\.", m.group(1)))
             out.extend(pre)
             out.append(f"{m.group(1)}getelementptr i8, ptr {q}, i64 0")  # keeps the original result name
             continue

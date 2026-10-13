@@ -20,3 +20,7 @@ extern int portSum(void *p, int n);                 /* a port function: an ordin
 int kport(void) { int * __ptr32 __uptr q = &gArr[24]; return portSum((void *)q, 4); }
 int kport2(int * __ptr32 __uptr q) { return portSum((void *)(q + 2), 4); }
 void kset(void) { *(volatile int * __ptr32 __uptr)&gArr[24] = 77; }
+
+void *toport(int * __ptr32 __uptr p) { return (void *)p; }
+int * __ptr32 __uptr fromport(void *p) { return (int * __ptr32 __uptr)p; }
+void *sel(int c, void *q) { return c ? q : (void *)(int * __ptr32 __uptr)0; }
