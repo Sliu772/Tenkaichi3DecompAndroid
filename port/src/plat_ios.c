@@ -438,6 +438,9 @@ static int game_entry(int argc, char *argv[]) {
     if (getenv("BT3_GS_VERBOSE") == NULL) {
         setenv("BT3_GS_VERBOSE", "1", 1); /* bring-up: draws, vertices and never-uploaded textures per frame in the log */
     }
+    if (getenv("BT3_GS_DUMP") == NULL) {
+        setenv("BT3_GS_DUMP", "600", 1); /* bring-up: list the primitives, registers and uploads of frame 600 (a logo screen) */
+    }
     fprintf(stderr, "bt3 iOS: BT3_GS=%s\n", getenv("BT3_GS"));
     start_heartbeat();
     ios_prepare_data(); /* no gamedata yet: unpack the .iso the user copied into Documents (shows its progress) */
