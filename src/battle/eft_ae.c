@@ -1363,6 +1363,20 @@ void BtlTaskList_Destroy(BtlTaskList *list) {
     }
 }
 
+#ifdef PORT /* iOS bring-up: a manager whose Init never left a list; the original would fault on NULL. Logs the first few. */
+#include <stdio.h>
+static void BtlTaskList_NullList(const char *what, void *cls, void *caller) {
+    static int n;
+
+    if (n < 20) {
+        n++;
+        fprintf(stderr, "bt3 task: %s on a NULL list, class %p, caller game offset %p\n", what, cls, caller);
+    }
+}
+#else
+#define BtlTaskList_NullList(what, cls, caller) ((void)0)
+#endif
+
 /* Adds a task to an empty list. Does not check that a free task exists. */
 BtlTask *BtlTaskList_AddFirst(BtlTaskList *list, BtlTaskCls *cls, void *arg) {
     BtlTask *task = list->free;
@@ -1381,6 +1395,10 @@ BtlTask *BtlTaskList_AddFirst(BtlTaskList *list, BtlTaskCls *cls, void *arg) {
 BtlTask *BtlTaskList_AddHead(BtlTaskList *list, BtlTaskCls *cls, void *arg) {
     BtlTask *task;
 
+    if (list == NULL) {
+        BtlTaskList_NullList("AddHead", cls, __builtin_return_address(0));
+        return NULL;
+    }
     if (list->head == NULL) {
         task = BtlTaskList_AddFirst(list, cls, arg);
     } else {
@@ -1393,6 +1411,10 @@ BtlTask *BtlTaskList_AddHead(BtlTaskList *list, BtlTaskCls *cls, void *arg) {
 BtlTask *BtlTaskList_AddTail(BtlTaskList *list, BtlTaskCls *cls, void *arg) {
     BtlTask *task;
 
+    if (list == NULL) {
+        BtlTaskList_NullList("AddTail", cls, __builtin_return_address(0));
+        return NULL;
+    }
     if (list->tail == NULL) {
         task = BtlTaskList_AddFirst(list, cls, arg);
     } else {
