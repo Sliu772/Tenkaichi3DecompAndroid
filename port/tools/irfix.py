@@ -9,6 +9,9 @@ code generator of LLVM 22 cannot select:
 Each operand is first cast to an ordinary pointer (`addrspacecast`, a zero extension), which is what the source
 means anyway. Text in, text out; used by undefined.py between `clang -emit-llvm` and `llc`."""
 import re, sys
+import pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import p32rebase
 
 ARG = re.compile(r'ptr addrspace\(271\)((?: (?:noundef|nonnull|readonly|writeonly|noalias|nocapture|captures\(\w+\)|align \d+|dereferenceable(?:_or_null)?\(\d+\)))*) (%[\w.$-]+|@[\w.$-]+|%"[^"]*"|@"[^"]*")')
 MEM = re.compile(r'@llvm\.mem(cpy|move|set)((?:\.inline)?)((?:\.p\d+)+)\.(i\d+)')
@@ -16,7 +19,7 @@ CALL = re.compile(r'^(\s*(?:%[\w.$-]+ = )?(?:tail |musttail |notail )?call (?:\w
 
 CASTED = "ptr addrspace(271) addrspacecast (ptr "
 
-def data_line(line):
+def data_line(line, anchor=None):
     """A global's definition or a type definition: 4-byte pointers written as i32, so that the address of a symbol in
     static data becomes `.long symbol` (the assembly printer rejects the address-space cast there)."""
     out, pos = [], 0
@@ -29,7 +32,11 @@ def data_line(line):
             depth += line[j] == "("
             depth -= line[j] == ")"
             j += 1
-        out.append(line[pos:k] + "i32 ptrtoint (ptr " + line[k + len(CASTED):j] + " to i32)")
+        x = line[k + len(CASTED):j]
+        if anchor:   # iOS (p32rebase.py): the offset from the image header, a link-time difference, not an absolute address
+            out.append(line[pos:k] + "i32 " + p32rebase.rel(x, anchor))
+        else:
+            out.append(line[pos:k] + "i32 ptrtoint (ptr " + x + " to i32)")
         pos = j + len(" to ptr addrspace(271))")
     line = "".join(out) + line[pos:]
     line = re.sub(r'ptr addrspace\(271\) inttoptr \(i(?:32|64) (-?\d+) to ptr addrspace\(271\)\)', r'i32 \1', line)
@@ -88,12 +95,12 @@ def hwreg_line(line, used):
     return HWREG.sub(sub, line)
 
 
-def fix(text, stores=False):
+def fix(text, stores=False, anchor=None):
     out, n, declared, need = [], 0, set(), {}
     hw_used = set()
     for line in text.split("\n"):
         if "addrspace(271)" in line and (GLOBAL.match(line) or TYPEDEF.match(line)):
-            out.append(data_line(line))
+            out.append(data_line(line, anchor))
             continue
         if stores and "inttoptr" in line and not line.startswith("@"):
             line = hwreg_line(line, hw_used)
@@ -166,6 +173,8 @@ def fix(text, stores=False):
     text = "\n".join(out)
     if extra:
         text += "\n" + "\n".join(extra) + "\n"
+    if anchor:
+        text = p32rebase.rebase(text, anchor)
     return text, n
 
 if __name__ == "__main__":

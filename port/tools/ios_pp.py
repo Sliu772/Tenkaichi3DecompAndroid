@@ -107,7 +107,8 @@ def macho_asm(text):
             continue
         m = _LONG.match(line)
         if m:
-            out.append(f"{m.group(1)}_{m.group(2)}{m.group(3)}")
+            # a 4-byte pointer in a table = offset from the image header (p32rebase.py): the linker resolves the difference
+            out.append(f"{m.group(1)}_{m.group(2)}{m.group(3)} - __mh_execute_header")
             continue
         out.append(line)
     return "\n".join(out) + "\n"
