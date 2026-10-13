@@ -91,12 +91,18 @@ static void *handle_out(PortFile *f) {
     return (void *)(uintptr_t)Port_P2A(f);
 }
 
+static int sDiagN; /* diagnostic: how many opens/reads were logged */
+
 static PortFile *open_rel(const char *rel) {
     PortFile *f;
     long size = Port_FileSize(rel); /* (says so itself when the file is missing) */
 
     if (size < 0) {
         return NULL;
+    }
+    if (sDiagN < 400) {
+        sDiagN++;
+        fprintf(stderr, "bt3 open: %s size %ld\n", rel, size);
     }
     f = Port_LowAlloc(sizeof(PortFile)); /* the game keeps the handle in a 4-byte pointer */
     snprintf(f->rel, sizeof(f->rel), "%s", rel);
@@ -256,6 +262,12 @@ int ADXF_ReadNw(void *h, int nsct, void *buf) {
         nsct = f->sizeSct - f->posSct;
     }
     got = Port_FileReadAt(f->rel, (long)f->posSct * SECTOR, buf, (size_t)nsct * SECTOR);
+    if (sDiagN < 400 && nsct > 0) {
+        const uint8_t *b = (const uint8_t *)buf;
+        sDiagN++;
+        fprintf(stderr, "bt3 read: %s pos %d nsct %d got %lu head %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x\n", f->rel, (int)f->posSct, nsct,
+                (unsigned long)got, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11]);
+    }
     memset((uint8_t *)buf + got, 0, (size_t)nsct * SECTOR - got);
     f->posSct += nsct;
     f->stat = STAT_READEND;
