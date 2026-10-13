@@ -86,3 +86,15 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: engine-compile-log, path: compile.log }
+      - name: Collect the IR of the files that failed
+        if: always()
+        run: |
+          mkdir -p failed-ll
+          for n in $(grep -E '^FAILED' compile.log | awk '{print $2}' | sort -u); do
+            cp port/build/ios/obj/*_"${n%.c}".ll failed-ll/ 2>/dev/null || true
+          done
+          grep -nE 'LLVM ERROR|Cannot select|unsupported' compile.log | head -20 || true
+          ls -la failed-ll
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: failed-ll, path: failed-ll, if-no-files-found: ignore }

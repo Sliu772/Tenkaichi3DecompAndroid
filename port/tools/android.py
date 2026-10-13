@@ -212,7 +212,7 @@ def compile_all():
         for o, name, err in ex.map(lambda j: j[0](j[1]), jobs):
             if o is None:
                 failed.append(name)
-                lines = [l for l in err.splitlines() if "error" in l or l.startswith("ptr32") or "Cannot select" in l]
+                lines = [l for l in err.splitlines() if "error" in l or l.startswith("ptr32") or "Cannot select" in l or "LLVM ERROR" in l or "Assertion" in l or "unsupported" in l]
                 print("FAILED", name, "\n   ".join((lines or err.strip().splitlines() or ["?"])[:6])[:900], flush=True)
     # the game's data tables: blank (their values come from the user's disc at start) unless real ones were made
     real = sorted((ROOT / "port/build/gen/data").glob("*.s"))
