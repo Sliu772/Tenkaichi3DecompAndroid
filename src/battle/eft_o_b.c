@@ -539,7 +539,15 @@ void EftBlastObjMgr_Reset(void) {
 
 /* Creates a blast object without a model; returns its task or NULL when the list is full. */
 void *EftBlastObj_Create(EftBlastObjArg *arg) {
+#ifdef PORT
+    /* static: on iOS the address of this stack copy reached EftBlastObj_Init as hdr + (the address's low 32 bits)
+       instead of an offset from the header, so every read of the argument missed (bt3 logs 45-51). */
+    static EftBlastObjArg a;
+
+    a = *arg;
+#else
     EftBlastObjArg a = *arg;
+#endif
 
     a.model = NULL;
 #ifdef PORT /* iOS bring-up: first calls, real addresses (%p) and the raw 4-byte values (0x...) */
@@ -559,7 +567,15 @@ void *EftBlastObj_Create(EftBlastObjArg *arg) {
 
 /* Creates a blast object that shows a model. */
 void *EftBlastObj_CreateWithModel(EftBlastObjArg *arg, s32 *model) {
+#ifdef PORT
+    /* static: on iOS the address of this stack copy reached EftBlastObj_Init as hdr + (the address's low 32 bits)
+       instead of an offset from the header, so every read of the argument missed (bt3 logs 45-51). */
+    static EftBlastObjArg a;
+
+    a = *arg;
+#else
     EftBlastObjArg a = *arg;
+#endif
 
     a.model = model;
     return BtlTaskList_AddTail(gEftBlastObjList, gEftBlastObjClass, &a);
