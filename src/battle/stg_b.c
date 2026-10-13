@@ -173,9 +173,9 @@ void *BtlStage_GetFileMember(s32 index) {
 }
 
 /* Stage effect resource A, when the stage flags allow it. */
-void *BtlStage_GetFxResA(void) {
+s32 BtlStage_GetFxResA(void) {
     StgData *d;
-    void *ret = NULL;
+    s32 ret = 0;
 
     if (gBtlStage != NULL) {
         d = gBtlStage->data;
@@ -191,13 +191,13 @@ void *BtlStage_GetFxResA(void) {
     }
     return ret;
 fail:
-    return NULL;
+    return 0;
 }
 
 /* Stage effect resource B, when the stage flags allow it. */
-void *BtlStage_GetFxResB(void) {
+s32 BtlStage_GetFxResB(void) {
     StgData *d;
-    void *ret = NULL;
+    s32 ret = 0;
 
     if (gBtlStage != NULL) {
         d = gBtlStage->data;
@@ -213,13 +213,13 @@ void *BtlStage_GetFxResB(void) {
     }
     return ret;
 fail:
-    return NULL;
+    return 0;
 }
 
 /* Stage effect resource C, when the stage flags allow it. */
-void *BtlStage_GetFxResC(void) {
+s32 BtlStage_GetFxResC(void) {
     StgData *d;
-    void *ret = NULL;
+    s32 ret = 0;
 
     if (gBtlStage != NULL) {
         d = gBtlStage->data;
@@ -235,7 +235,7 @@ void *BtlStage_GetFxResC(void) {
     }
     return ret;
 fail:
-    return NULL;
+    return 0;
 }
 
 /* Second pointer of effect resource A, when the first exists. */
@@ -254,7 +254,7 @@ void *BtlStage_GetFxResA2(void) {
             if (res == NULL) {
                 goto fail;
             }
-            if (res->a == NULL) {
+            if (res->a == 0) {
                 goto fail;
             }
             ret = res->a2;
@@ -281,7 +281,7 @@ void *BtlStage_GetFxResB2(void) {
             if (res == NULL) {
                 goto fail;
             }
-            if (res->b == NULL) {
+            if (res->b == 0) {
                 goto fail;
             }
             ret = res->b2;
@@ -308,7 +308,7 @@ void *BtlStage_GetFxResC2(void) {
             if (res == NULL) {
                 goto fail;
             }
-            if (res->c == NULL) {
+            if (res->c == 0) {
                 goto fail;
             }
             ret = res->c2;

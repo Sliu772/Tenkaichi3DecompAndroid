@@ -400,8 +400,10 @@ f32 EftShot_GetLeadTime(EftHSlot *slot) {
 }
 
 /* The effect pack of a technique slot, from the fighter object. */
-s32 EftShot_GetCharPack(s32 chr, s32 slot) {
-    return BtlCharApi_GetPlayerObjUnk9C(chr, slot);
+void *EftShot_GetCharPack(s32 chr, s32 slot) {
+    /* The object's word is a 4-byte offset: the cast makes it a real pointer (0 stays NULL). Returning s32 here while the
+       caller (eft_g.c) declares a pointer handed InitSlot the raw offset. */
+    return (void *)BtlCharApi_GetPlayerObjUnk9C(chr, slot);
 }
 
 /* ---- effect type -1: nothing ------------------------------------------------------------------------------ */

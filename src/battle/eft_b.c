@@ -145,7 +145,7 @@ extern EftGeyserRec *BtlStage_GetFxResA2(void);
 extern s32 BtlPool_GetCurrent(void);
 extern void *BtlPool_Alloc(s32 slot, s32 size);
 extern void BtlPool_Free(s32 slot, void *ptr);
-extern s32 *BtlScene_GetStageData(void);
+extern s32 BtlScene_GetStageData(void); /* the word at gCommonRes + 0x24: an offset, cast it to get the pointer */
 extern s32 *BtlScene_GetPackEntry(s32 *base, s32 idx);
 extern s32 BtlScene_GetPackEntrySize(s32 *base, s32 idx);
 extern s32 BtlScene_IsSecondView(void);
@@ -664,7 +664,7 @@ void EftBubble_Init(EftBTask *task) {
         gEftBubble->pool = BtlPool_Alloc(BtlPool_GetCurrent(), EFT_BUBBLE_MAX * sizeof(EftBubble));
         memset(gEftBubble->pool, 0, EFT_BUBBLE_MAX * sizeof(EftBubble));
     }
-    stage = BtlScene_GetStageData();
+    stage = (s32 *)BtlScene_GetStageData();
     if (BtlScene_GetPackEntrySize(stage, 0x12) > 0) {
         EftTexSet_Load32(&gEftBubble->tex, BtlScene_GetPackEntry(stage, 0x12));
         if (gEftBubble->tex.count < 6) {
@@ -1423,7 +1423,7 @@ void EftGeyser_Kill(EftBTask *task) {
 /* Manager init: loads the textures and creates a column for every record of the stage. */
 void EftGeyser_MgrInit(EftBTask *task) {
     EftGeyserParam param;
-    s32 *stage = BtlScene_GetStageData();
+    s32 *stage = (s32 *)BtlScene_GetStageData();
     s32 count = BtlStage_GetFxResA();
     EftGeyserRec *res;
     EftGeyserRec *rec;
