@@ -2,6 +2,9 @@
 #include "sys/bpe.h"
 #include "sys/heap.h"
 
+extern void Port_DiagBlock(const char *what, const void *p, u32 bytes); /* bring-up (iOS) */
+extern void Port_DiagNote(const char *what, long a, long b);
+
 /* Expands byte-pair-encoded data (Philip Gage's "expand"); allocates the output when dst is NULL. Returns the output. */
 void *Bpe_Decode(void *src, void *dst, s32 *rawSize) {
     u8 left[256];
@@ -17,6 +20,7 @@ void *Bpe_Decode(void *src, void *dst, s32 *rawSize) {
     s16 blockSize;
     s32 hi;
     void *buf;
+    void *src0 = src;
 
     size = *(s32 *)src;
     src = (s32 *)src + 1;
@@ -32,6 +36,8 @@ void *Bpe_Decode(void *src, void *dst, s32 *rawSize) {
     }
     out = buf;
     in = src;
+    Port_DiagNote("bpe: rawSize, packSize", size, packSize);
+    Port_DiagBlock("bpe in", src0, (u32)packSize + 8);
     while (in - (u8 *)src != packSize) {
         count = *in++;
         for (i = 0; i < 256; i++) {
@@ -77,5 +83,7 @@ void *Bpe_Decode(void *src, void *dst, s32 *rawSize) {
             }
         }
     }
+    Port_DiagNote("bpe: bytes written, rawSize", (long)(out - (u8 *)buf), size);
+    Port_DiagBlock("bpe out", buf, (u32)size);
     return buf;
 }

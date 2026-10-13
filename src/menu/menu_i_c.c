@@ -2,6 +2,9 @@
 #include "menu/menu_i.h"
 #include "sys/pad.h"
 
+extern void Port_DiagBlock(const char *what, const void *p, u32 bytes); /* bring-up (iOS) */
+extern void Port_DiagNote(const char *what, long a, long b);
+
 Logo *gLogo = NULL; /* 0x3B590C */
 
 /*
@@ -14,11 +17,19 @@ Logo *gLogo = NULL; /* 0x3B590C */
 /* Allocates the logo work and relocates picture `section` of the unpacked pack. */
 void Logo_Init(u32 *pack, s32 section, s32 frames) {
     MTexRes *res = NULL;
+    u32 *e;
 
     gLogo = Heap_Alloc(0x24, 0x20, 0, 2);
     memset(gLogo, 0, 0x24);
     res = (MTexRes *)MPACK_AT(pack, section);
+    Port_DiagBlock("logo res before relocation", res, 0x80);
     Res_RelocateOffsets(&res, res, res);
+    e = (u32 *)MTEX(res, 0); /* entry 0 as words: pixOfs, clutOfs, pixSize, clutSize (offsets in words from the section) */
+    Port_DiagNote("logo: section, entries", section, (long)((u32 *)res)[0]);
+    Port_DiagBlock("logo res after relocation", res, 0x80);
+    Port_DiagBlock("logo entry 0", e, 0x40);
+    Port_DiagBlock("logo pixels 0", (u8 *)res + e[0] * 4, (u32)e[2]);
+    Port_DiagBlock("logo clut 0", (u8 *)res + e[1] * 4, (u32)e[3]);
     gLogo->pic = res;
     gLogo->frames = frames;
 }

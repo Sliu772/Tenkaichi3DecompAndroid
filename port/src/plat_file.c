@@ -306,3 +306,36 @@ int sceCdSearchFile(void *file, const char *name) {
     (void)file;
     return name != NULL && strstr(name, "216.78") != NULL;
 }
+
+/* bring-up (iOS): what a block of game memory holds, for the logo pictures that arrive empty (at most 120 lines) */
+void Port_DiagBlock(const char *what, const void *p, uint32_t bytes) {
+    static int sLines;
+    const uint32_t *w = (const uint32_t *)p;
+    uint32_t n = bytes / 4, k, nz = 0;
+    int first = -1;
+
+    if (sLines >= 120 || p == NULL) {
+        return;
+    }
+    sLines++;
+    for (k = 0; k < n; k++) {
+        if (w[k] != 0) {
+            nz++;
+            if (first < 0) { first = (int)k; }
+        }
+    }
+    fprintf(stderr, "bt3 diag: %s at %08x, %u bytes, %u of %u words not zero, first at %d; data:", what,
+            (unsigned)(uintptr_t)p, (unsigned)bytes, (unsigned)nz, (unsigned)n, first);
+    for (k = 0; k < 8 && k < n; k++) {
+        fprintf(stderr, " %08x", (unsigned)w[k]);
+    }
+    fprintf(stderr, "\n");
+}
+
+void Port_DiagNote(const char *what, long a, long b) {
+    static int sLines;
+
+    if (sLines++ < 120) {
+        fprintf(stderr, "bt3 diag: %s %ld %ld\n", what, a, b);
+    }
+}
