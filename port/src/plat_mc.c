@@ -19,14 +19,19 @@
  * The names are the library's addresses in the PS2 executable; the game sources #define the sce names onto them.
  */
 #include <dirent.h>
+#include <errno.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 #ifdef _WIN32
 #include <direct.h>
 #define mkdir(path, mode) _mkdir(path) /* Windows: no permission bits */
+#define getcwd _getcwd
 #endif
 
 #define MC_FILES 8
@@ -55,7 +60,14 @@ static FILE *host_file(int fd) {
     return sHost[fd];
 }
 
+/* Diagnostic (bt3_log.txt): every request the game makes of the card, with its result. Only the first 400. */
 static int request(int cmd, int result) {
+    static int sCount = 0;
+
+    if (sCount < 400) {
+        sCount++;
+        fprintf(stderr, "bt3 mc: #%d cmd %d -> %d\n", sCount, cmd, result);
+    }
     sLastCmd = cmd;
     sLastResult = result;
     return 0;
@@ -72,6 +84,14 @@ static int host_path(int port, const char *name, char *out, size_t size) {
     mkdir(root, 0755);
     snprintf(dir, sizeof(dir), "%s/card1", root);
     mkdir(dir, 0755);
+    {
+        static int sShown = 0;
+        if (!sShown) {
+            char cwd[512];
+            sShown = 1;
+            fprintf(stderr, "bt3 mc: card folder %s (cwd %s)\n", dir, getcwd(cwd, sizeof(cwd)) != NULL ? cwd : "?");
+        }
+    }
     while (*name == '/') {
         name++;
     }
@@ -120,6 +140,7 @@ int func_002A1E58(int port, int slot, char *name, int mode) {
     if (f == NULL && (mode & 0x200)) {
         f = fopen(path, "w+b");
     }
+    fprintf(stderr, "bt3 mc: open %s mode 0x%x -> %s (errno %d)\n", path, mode, f != NULL ? "ok" : "fail", f != NULL ? 0 : errno);
     if (f == NULL) {
         return request(2, -4);
     }
@@ -142,7 +163,11 @@ int func_002A1F80(int port, int slot, char *name) {
     if (slot != 0 || !host_path(port, name, path, sizeof(path))) {
         return request(11, -10);
     }
-    return request(11, mkdir(path, 0755) == 0 ? 0 : -4);
+    {
+        int r = mkdir(path, 0755);
+        fprintf(stderr, "bt3 mc: mkdir %s -> %d (errno %d)\n", path, r, r == 0 ? 0 : errno);
+        return request(11, r == 0 ? 0 : -4);
+    }
 }
 
 /* sceMcClose */
@@ -195,6 +220,7 @@ int func_002A2320(int fd, void *buf, int size) {
     fseek(f, sMc[fd].pos, SEEK_SET);
     n = (int)fwrite(buf, 1, (size_t)size, f);
     fflush(f);
+    fprintf(stderr, "bt3 mc: write fd %d %d bytes at %ld -> %d\n", fd, size, sMc[fd].pos, n);
     sMc[fd].pos += n;
     return request(6, n);
 }
