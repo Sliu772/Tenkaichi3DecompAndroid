@@ -549,7 +549,196 @@ static void bind(int value) {
     PortInput_Save();
 }
 
+#ifdef __APPLE__
+// ---- iOS: the on-screen controller (player 1) -------------------------------------------------------------------
+// Left: an analog stick (it also gives the menus their directions: the game reads the stick as directions, src/sys/pad.c).
+// Right: the four symbols. Shoulders above each side, SELECT and START at the bottom. Several fingers at once, one per
+// control; a finger that slides onto another button takes it. START + SELECT together open the settings window
+// (gs_input.c: PortInput_ComboPoll). Hidden while a gamepad is connected or with BT3_TOUCH=0 / the setting "touch" = 0.
+extern "C" void Port_TouchPad(unsigned buttons, int lx, int ly, int rx, int ry); // gs_input.c
+
+namespace {
+enum { T_SELECT = 0x0001, T_START = 0x0008, T_L2 = 0x0100, T_R2 = 0x0200, T_L1 = 0x0400, T_R1 = 0x0800,
+       T_TRIANGLE = 0x1000, T_CIRCLE = 0x2000, T_CROSS = 0x4000, T_SQUARE = 0x8000 };
+enum { SYM_NONE, SYM_TRIANGLE, SYM_CIRCLE, SYM_CROSS, SYM_SQUARE };
+struct TBtn { unsigned bit; bool round; float cx, cy, hw, hh; const char *label; int sym; };
+struct TFinger { SDL_FingerID id; int ctrl; float x, y; };
+const int T_NB = 10, T_STICK = 100, T_MAXF = 8;
+TBtn sTB[T_NB];
+TFinger sTF[T_MAXF];
+int sTN;
+float sTSx, sTSy, sTSr, sTW, sTH, sTU;
+unsigned sTMask;
+int sTLX = 128, sTLY = 128;
+int sTOn = -1;
+
+bool touch_on(void) {
+    if (sTOn < 0) {
+        sTOn = getenv("BT3_TOUCH") != NULL ? atoi(getenv("BT3_TOUCH")) != 0 : Port_Setting("touch", 1) != 0;
+    }
+    return sTOn != 0 && !SDL_HasGamepad();
+}
+
+void touch_layout(float w, float h) {
+    float u = fminf(h * 0.15f, w * 0.085f);
+    float fx = w - u * 2.7f, fy = h - u * 2.5f, d = u * 1.05f, r = u * 0.62f;
+    sTW = w; sTH = h; sTU = u;
+    sTSx = u * 2.7f; sTSy = h - u * 2.5f; sTSr = u * 1.6f;
+    sTB[0] = {T_TRIANGLE, true, fx, fy - d, r, r, "", SYM_TRIANGLE};
+    sTB[1] = {T_CIRCLE, true, fx + d, fy, r, r, "", SYM_CIRCLE};
+    sTB[2] = {T_CROSS, true, fx, fy + d, r, r, "", SYM_CROSS};
+    sTB[3] = {T_SQUARE, true, fx - d, fy, r, r, "", SYM_SQUARE};
+    float ly = sTSy - sTSr - u * 1.0f, ry = fy - d - r - u * 0.9f;
+    sTB[4] = {T_L1, false, u * 1.7f, ly, u * 0.9f, u * 0.4f, "L1", SYM_NONE};
+    sTB[5] = {T_R1, false, w - u * 1.7f, ry, u * 0.9f, u * 0.4f, "R1", SYM_NONE};
+    sTB[6] = {T_L2, false, u * 1.7f, ly - u * 1.1f, u * 0.9f, u * 0.4f, "L2", SYM_NONE};
+    sTB[7] = {T_R2, false, w - u * 1.7f, ry - u * 1.1f, u * 0.9f, u * 0.4f, "R2", SYM_NONE};
+    sTB[8] = {T_SELECT, false, w * 0.5f - u * 1.2f, h - u * 0.65f, u * 0.8f, u * 0.3f, "SELECT", SYM_NONE};
+    sTB[9] = {T_START, false, w * 0.5f + u * 1.2f, h - u * 0.65f, u * 0.8f, u * 0.3f, "START", SYM_NONE};
+}
+
+int touch_hit(float x, float y, bool stick) {
+    if (stick) {
+        float dx = x - sTSx, dy = y - sTSy;
+        if (dx * dx + dy * dy <= sTSr * sTSr * 2.25f) {
+            return T_STICK;
+        }
+    }
+    for (int i = 0; i < T_NB; i++) {
+        const TBtn &b = sTB[i];
+        float dx = x - b.cx, dy = y - b.cy;
+        if (b.round ? dx * dx + dy * dy <= b.hw * b.hw * 1.7f : (fabsf(dx) <= b.hw * 1.15f && fabsf(dy) <= b.hh * 1.6f)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void touch_push(void) {
+    unsigned mask = 0;
+    int lx = 128, ly = 128;
+    for (int i = 0; i < sTN; i++) {
+        if (sTF[i].ctrl >= 0 && sTF[i].ctrl < T_NB) {
+            mask |= sTB[sTF[i].ctrl].bit;
+        } else if (sTF[i].ctrl == T_STICK) {
+            float dx = (sTF[i].x - sTSx) / sTSr, dy = (sTF[i].y - sTSy) / sTSr, len = sqrtf(dx * dx + dy * dy);
+            if (len > 1.0f) {
+                dx /= len; dy /= len; len = 1.0f;
+            }
+            if (len > 0.15f) {
+                lx = 128 + (int)lroundf(dx * 127.0f);
+                ly = 128 + (int)lroundf(dy * 127.0f);
+            }
+        }
+    }
+    sTMask = mask; sTLX = lx; sTLY = ly;
+    Port_TouchPad(mask, lx, ly, 128, 128);
+}
+
+void touch_release_all(void) {
+    if (sTN != 0 || sTMask != 0) {
+        sTN = 0;
+        touch_push();
+    }
+}
+
+// 1 = the event was a finger and the controller used it
+int touch_event(const SDL_Event *ev) {
+    ImGuiIO &io = ImGui::GetIO();
+    if (!touch_on()) {
+        touch_release_all();
+        return 0;
+    }
+    if (ev->type != SDL_EVENT_FINGER_DOWN && ev->type != SDL_EVENT_FINGER_MOTION && ev->type != SDL_EVENT_FINGER_UP &&
+        ev->type != SDL_EVENT_FINGER_CANCELED) {
+        return 0;
+    }
+    if (io.DisplaySize.x <= 0.0f || io.DisplaySize.y <= 0.0f) {
+        return 0;
+    }
+    touch_layout(io.DisplaySize.x, io.DisplaySize.y);
+    float x = ev->tfinger.x * io.DisplaySize.x, y = ev->tfinger.y * io.DisplaySize.y;
+    int at = -1;
+    for (int i = 0; i < sTN; i++) {
+        if (sTF[i].id == ev->tfinger.fingerID) {
+            at = i;
+        }
+    }
+    if (ev->type == SDL_EVENT_FINGER_UP || ev->type == SDL_EVENT_FINGER_CANCELED) {
+        if (at >= 0) {
+            sTF[at] = sTF[--sTN];
+            touch_push();
+        }
+        return 1;
+    }
+    if (at < 0) {
+        if (ev->type != SDL_EVENT_FINGER_DOWN || sTN >= T_MAXF) {
+            return 1;
+        }
+        at = sTN++;
+        sTF[at].id = ev->tfinger.fingerID;
+        sTF[at].ctrl = touch_hit(x, y, true);
+    } else if (sTF[at].ctrl != T_STICK) {
+        sTF[at].ctrl = touch_hit(x, y, false); // sliding from one button onto another
+    }
+    sTF[at].x = x;
+    sTF[at].y = y;
+    touch_push();
+    return 1;
+}
+
+void touch_draw(void) {
+    ImGuiIO &io = ImGui::GetIO();
+    if (io.DisplaySize.x <= 0.0f || io.DisplaySize.y <= 0.0f) {
+        return;
+    }
+    touch_layout(io.DisplaySize.x, io.DisplaySize.y);
+    ImDrawList *dl = ImGui::GetForegroundDrawList();
+    const ImU32 line = IM_COL32(255, 255, 255, 150), fill = IM_COL32(20, 20, 30, 70), on = IM_COL32(255, 255, 255, 110);
+    float t = fmaxf(2.0f, sTU * 0.06f);
+    dl->AddCircleFilled(ImVec2(sTSx, sTSy), sTSr, fill, 40);
+    dl->AddCircle(ImVec2(sTSx, sTSy), sTSr, line, 40, t);
+    float kx = sTSx + (float)(sTLX - 128) / 127.0f * sTSr, ky = sTSy + (float)(sTLY - 128) / 127.0f * sTSr;
+    dl->AddCircleFilled(ImVec2(kx, ky), sTSr * 0.42f, IM_COL32(255, 255, 255, 120), 32);
+    for (int i = 0; i < T_NB; i++) {
+        const TBtn &b = sTB[i];
+        bool down = (sTMask & b.bit) != 0;
+        ImVec2 c(b.cx, b.cy);
+        if (b.round) {
+            dl->AddCircleFilled(c, b.hw, down ? on : fill, 32);
+            dl->AddCircle(c, b.hw, line, 32, t);
+            float s = b.hw * 0.5f;
+            if (b.sym == SYM_TRIANGLE) {
+                dl->AddTriangle(ImVec2(c.x, c.y - s), ImVec2(c.x - s, c.y + s * 0.8f), ImVec2(c.x + s, c.y + s * 0.8f), line, t);
+            } else if (b.sym == SYM_CIRCLE) {
+                dl->AddCircle(c, s, line, 24, t);
+            } else if (b.sym == SYM_CROSS) {
+                dl->AddLine(ImVec2(c.x - s, c.y - s), ImVec2(c.x + s, c.y + s), line, t);
+                dl->AddLine(ImVec2(c.x - s, c.y + s), ImVec2(c.x + s, c.y - s), line, t);
+            } else if (b.sym == SYM_SQUARE) {
+                dl->AddRect(ImVec2(c.x - s, c.y - s), ImVec2(c.x + s, c.y + s), line, 0.0f, 0, t);
+            }
+        } else {
+            ImVec2 a(b.cx - b.hw, b.cy - b.hh), z(b.cx + b.hw, b.cy + b.hh);
+            dl->AddRectFilled(a, z, down ? on : fill, b.hh);
+            dl->AddRect(a, z, line, b.hh, 0, t);
+            ImVec2 ts = ImGui::GetFont()->CalcTextSizeA(b.hh * 1.1f, FLT_MAX, 0.0f, b.label);
+            dl->AddText(ImGui::GetFont(), b.hh * 1.1f, ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), line, b.label);
+        }
+    }
+}
+} // namespace
+#endif
+
 int Ui_Event(const SDL_Event *ev) {
+#ifdef __APPLE__
+    if (sReady && !sOpen) {
+        return touch_event(ev);
+    }
+    if (sReady && sOpen) {
+        touch_release_all();
+    }
+#endif
     if (!sReady || !sOpen) {
         return 0;
     }
@@ -1254,11 +1443,16 @@ static bool frame_build(void) {
     bool songOn = gUiSongReady != 0 && gUiSongIdx >= 0 && gUiSongIdx < PortSongs_Count(); // (the same for an added song)
     bool overlay = nameOn || songOn;
     bool meter = sReady && meter_on();
+#ifdef __APPLE__
+    bool pad = sReady && !sOpen && touch_on();
+#else
+    bool pad = false;
+#endif
     // the players' names under the gauges of an online fight
     bool names = sReady && Port_NetActive() && BtlChar_FindByObjId(0) != NULL && (Port_NetName(0)[0] != '\0' || Port_NetName(1)[0] != '\0');
     meter_count();
     sBuilt = false;
-    if (!sReady || (!sOpen && !notice && !overlay && !meter && !names)) {
+    if (!sReady || (!sOpen && !notice && !overlay && !meter && !names && !pad)) {
         return false;
     }
     sBuilt = true;
@@ -1279,6 +1473,11 @@ static bool frame_build(void) {
     if (meter) {
         meter_draw();
     }
+#ifdef __APPLE__
+    if (pad) {
+        touch_draw();
+    }
+#endif
     if (names && gUiPresentW > 0 && gUiPresentH > 0) {
         // Under each side's health bar (the game's 512 x 448 page: the bars end at about y 50). The left place is
         // side 0's, or this player's own side when the HUD's sides are swapped.

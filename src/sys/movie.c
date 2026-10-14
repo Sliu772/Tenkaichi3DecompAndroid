@@ -167,7 +167,7 @@ void MovieTag_SetTrxDir(u32 *p, s32 dir) {
 /* Starts an upload chain on the GIF DMA channel without waiting for it. */
 void MovieTag_Send(u32 *tags) {
 #ifdef PORT
-    *D2_TADR = (u32)tags;
+    *D2_TADR = DMA_TAG_ADDR(tags); /* the offset from the header on iOS, not the low half of the real address */
 #else
     *D2_TADR = (u32)tags & 0x0FFFFFFF;
 #endif
@@ -391,7 +391,7 @@ s32 Movie_CbNoData(sceMpeg *mp, void *cbData, void *data) {
         end = start + size;
     }
     *D4_QWC = size / 16;
-    *D4_MADR = (u32)start;
+    *D4_MADR = DMA_TAG_ADDR(start);
     *D4_CHCR = 0x101;
     gMovieEsDmaEnd = end;
     if (!(gMovieEsDmaEnd < limit)) {

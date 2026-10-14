@@ -30,7 +30,7 @@ extern int Mpeg2_Height(const Mpeg2 *m);
 extern void Mpeg2_Close(Mpeg2 *m);
 
 static Mpeg2 *sMovie;
-static int sStarted, sEnd;
+static int sStarted, sEnd, sPictures;
 static uint8_t sFrame[MOVIE_W * MOVIE_H * 4];
 
 static void movie_close(void) {
@@ -51,6 +51,7 @@ static void movie_start(void) {
     }
     sMovie = Mpeg2_Open(gPortMoviePath);
     sEnd = sMovie == NULL;
+    fprintf(stderr, "bt3 movie: open %s -> %s\n", gPortMoviePath, sMovie != NULL ? "ok" : "FAILED");
 }
 
 int sceMpegInit(void) { return 0; }
@@ -80,8 +81,13 @@ int sceMpegGetPicture(void *mp, void *rgb, int blocks) {
         movie_start();
     }
     if (sMovie == NULL || !Mpeg2_Next(sMovie, sFrame) || Mpeg2_Width(sMovie) != MOVIE_W || Mpeg2_Height(sMovie) != MOVIE_H) {
+        fprintf(stderr, "bt3 movie: ends after %d pictures (%s)\n", sPictures, sMovie == NULL ? "no decoder" : "no more pictures or size not 512x448");
+        sPictures = 0;
         sEnd = 1;
         return -1;
+    }
+    if (sPictures++ == 0) {
+        fprintf(stderr, "bt3 movie: first picture %dx%d, pixel 0 = %02x%02x%02x\n", Mpeg2_Width(sMovie), Mpeg2_Height(sMovie), sFrame[0], sFrame[1], sFrame[2]);
     }
     for (i = 0; i < cols; i++) {
         for (j = 0; j < rows && i * rows + j < blocks; j++) {
