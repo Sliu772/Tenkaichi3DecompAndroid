@@ -191,9 +191,16 @@ void Title_Update(void) {
 }
 
 /* Card flow callback 0 (done): the save exists now; leave with result 0. */
-void Title_OnCardDone(s32 *result) {
-    if (result != NULL) {
-        *result = 0;
+/* iOS: the title's `result` (a stack address) can not travel through McFlow's s32 argument: McFlow_SetDoneCb takes an
+   s32, so the address was cut to its low 32 bits, which on iOS is neither a real address nor the 4-byte offset the game
+   uses. The callback then wrote 0 somewhere else and Title_Run kept result = 1: the attract-demo (ghost) battle. The
+   pointer is kept here instead and the argument is unused. */
+static s32 *sTitleResult;
+
+void Title_OnCardDone(s32 arg) {
+    (void)arg;
+    if (sTitleResult != NULL) {
+        *sTitleResult = 0;
     }
     TITLE_LEAVE();
 }
@@ -269,7 +276,8 @@ void Title_Input(s32 *result) {
             switch (gTitle->cursor) {
             case 0:
                 McFlow_Start(3);
-                McFlow_SetDoneCb(0, Title_OnCardDone, result);
+                sTitleResult = result;
+                McFlow_SetDoneCb(0, Title_OnCardDone, NULL);
                 McFlow_SetDoneCb(1, Title_OnCardCancel, NULL);
                 break;
             case 1:
