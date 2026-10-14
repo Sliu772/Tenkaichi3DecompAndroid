@@ -2459,7 +2459,7 @@ void BtlObj_BindCommonTables(BObj *obj) {
     /* Entry 0xE + first + i, written the way the original's address arithmetic comes out. */
     ofs = first * 4 + 0x38;
     for (i = 0; i < 100; i++) {
-        p = (u32 *)(ofs + (u32)res->file3.buf);
+        p = (u32 *)((u8 *)res->file3.buf + ofs);
         ofs += 4;
         if (p[1] != p[0]) {
             obj->mdl.lip[i] = (BObjLipData *)((u8 *)res->file3.buf + (p[0] >> 2 << 2));

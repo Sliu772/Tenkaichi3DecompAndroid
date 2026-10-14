@@ -558,12 +558,12 @@ static void bind(int value) {
 extern "C" void Port_TouchPad(unsigned buttons, int lx, int ly, int rx, int ry); // gs_input.c
 
 namespace {
-enum { T_SELECT = 0x0001, T_START = 0x0008, T_L2 = 0x0100, T_R2 = 0x0200, T_L1 = 0x0400, T_R1 = 0x0800,
+enum { T_SELECT = 0x0001, T_L3 = 0x0002, T_R3 = 0x0004, T_START = 0x0008, T_UP = 0x0010, T_RIGHT = 0x0020, T_DOWN = 0x0040, T_LEFT = 0x0080, T_L2 = 0x0100, T_R2 = 0x0200, T_L1 = 0x0400, T_R1 = 0x0800,
        T_TRIANGLE = 0x1000, T_CIRCLE = 0x2000, T_CROSS = 0x4000, T_SQUARE = 0x8000 };
-enum { SYM_NONE, SYM_TRIANGLE, SYM_CIRCLE, SYM_CROSS, SYM_SQUARE };
+enum { SYM_NONE, SYM_TRIANGLE, SYM_CIRCLE, SYM_CROSS, SYM_SQUARE, SYM_UP, SYM_DOWN, SYM_LEFT, SYM_RIGHT };
 struct TBtn { unsigned bit; bool round; float cx, cy, hw, hh; const char *label; int sym; };
 struct TFinger { SDL_FingerID id; int ctrl; float x, y; };
-const int T_NB = 10, T_STICK = 100, T_MAXF = 8;
+const int T_NB = 16, T_STICK = 100, T_MAXF = 8;
 TBtn sTB[T_NB];
 TFinger sTF[T_MAXF];
 int sTN;
@@ -593,14 +593,22 @@ void touch_layout(float w, float h) {
     sTB[5] = {T_R1, false, w - u * 1.7f, ry, u * 0.9f, u * 0.4f, "R1", SYM_NONE};
     sTB[6] = {T_L2, false, u * 1.7f, ly - u * 1.1f, u * 0.9f, u * 0.4f, "L2", SYM_NONE};
     sTB[7] = {T_R2, false, w - u * 1.7f, ry - u * 1.1f, u * 0.9f, u * 0.4f, "R2", SYM_NONE};
-    sTB[8] = {T_SELECT, false, w * 0.5f - u * 1.2f, h - u * 0.65f, u * 0.8f, u * 0.3f, "SELECT", SYM_NONE};
-    sTB[9] = {T_START, false, w * 0.5f + u * 1.2f, h - u * 0.65f, u * 0.8f, u * 0.3f, "START", SYM_NONE};
+    sTB[8] = {T_SELECT, false, w * 0.5f - u * 1.2f, u * 0.5f, u * 0.8f, u * 0.3f, "SELECT", SYM_NONE};
+    sTB[9] = {T_START, false, w * 0.5f + u * 1.2f, u * 0.5f, u * 0.8f, u * 0.3f, "START", SYM_NONE};
+    // the d-pad between the stick and the symbols; L3 / R3 (the stick clicks) small, under the shoulders
+    float dx = u * 6.3f, dy = h - u * 1.9f, dd = u * 0.95f, dh = u * 0.5f;
+    sTB[10] = {T_UP, false, dx, dy - dd, dh, dh, "", SYM_UP};
+    sTB[11] = {T_DOWN, false, dx, dy + dd, dh, dh, "", SYM_DOWN};
+    sTB[12] = {T_LEFT, false, dx - dd, dy, dh, dh, "", SYM_LEFT};
+    sTB[13] = {T_RIGHT, false, dx + dd, dy, dh, dh, "", SYM_RIGHT};
+    sTB[14] = {T_L3, true, u * 0.7f, ly + u * 0.95f, u * 0.38f, u * 0.38f, "L3", SYM_NONE};
+    sTB[15] = {T_R3, true, w - u * 0.7f, ry + u * 0.95f, u * 0.38f, u * 0.38f, "R3", SYM_NONE};
 }
 
 int touch_hit(float x, float y, bool stick) {
     if (stick) {
         float dx = x - sTSx, dy = y - sTSy;
-        if (dx * dx + dy * dy <= sTSr * sTSr * 2.25f) {
+        if (dx * dx + dy * dy <= sTSr * sTSr * 1.56f) {
             return T_STICK;
         }
     }
@@ -717,6 +725,24 @@ void touch_draw(void) {
                 dl->AddLine(ImVec2(c.x - s, c.y + s), ImVec2(c.x + s, c.y - s), line, t);
             } else if (b.sym == SYM_SQUARE) {
                 dl->AddRect(ImVec2(c.x - s, c.y - s), ImVec2(c.x + s, c.y + s), line, 0.0f, 0, t);
+            } else if (b.label[0] != '\0') {
+                float fs = b.hw * 0.9f;
+                ImVec2 ts = ImGui::GetFont()->CalcTextSizeA(fs, FLT_MAX, 0.0f, b.label);
+                dl->AddText(ImGui::GetFont(), fs, ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), line, b.label);
+            }
+        } else if (b.sym >= SYM_UP) {
+            ImVec2 a(b.cx - b.hw, b.cy - b.hh), z(b.cx + b.hw, b.cy + b.hh);
+            float s = b.hw * 0.55f;
+            dl->AddRectFilled(a, z, down ? on : fill, b.hw * 0.3f);
+            dl->AddRect(a, z, line, b.hw * 0.3f, 0, t);
+            if (b.sym == SYM_UP) {
+                dl->AddTriangleFilled(ImVec2(c.x, c.y - s), ImVec2(c.x - s, c.y + s * 0.7f), ImVec2(c.x + s, c.y + s * 0.7f), line);
+            } else if (b.sym == SYM_DOWN) {
+                dl->AddTriangleFilled(ImVec2(c.x, c.y + s), ImVec2(c.x - s, c.y - s * 0.7f), ImVec2(c.x + s, c.y - s * 0.7f), line);
+            } else if (b.sym == SYM_LEFT) {
+                dl->AddTriangleFilled(ImVec2(c.x - s, c.y), ImVec2(c.x + s * 0.7f, c.y - s), ImVec2(c.x + s * 0.7f, c.y + s), line);
+            } else {
+                dl->AddTriangleFilled(ImVec2(c.x + s, c.y), ImVec2(c.x - s * 0.7f, c.y - s), ImVec2(c.x - s * 0.7f, c.y + s), line);
             }
         } else {
             ImVec2 a(b.cx - b.hw, b.cy - b.hh), z(b.cx + b.hw, b.cy + b.hh);

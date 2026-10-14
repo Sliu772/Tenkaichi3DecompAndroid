@@ -1079,9 +1079,9 @@ void EftSurf_Relocate(EftSurfFile *file) {
     EftSurfMesh *mesh;
     s32 i;
 
-    file->unkC += (s32)file;
-    file->texs = (EftSurfTex *)((s32)file->texs + (s32)file);
-    file->meshes = (EftSurfMesh *)((s32)file->meshes + (s32)file);
+    file->unkC += (s32)GAME_ADDR(file);
+    file->texs = (EftSurfTex *)((s32)file->texs + (s32)GAME_ADDR(file));
+    file->meshes = (EftSurfMesh *)((s32)file->meshes + (s32)GAME_ADDR(file));
     if (file->version != 4) {
         file->meshCount = 0;
         file->texCount = 0;
@@ -1089,13 +1089,13 @@ void EftSurf_Relocate(EftSurfFile *file) {
     }
     tex = file->texs;
     for (i = 0; i < file->texCount; i++) {
-        tex->ptr0 = tex->ofs0 + (s32)file;
-        tex->ptr4 = tex->ofs4 + (s32)file;
+        tex->ptr0 = tex->ofs0 + (s32)GAME_ADDR(file);
+        tex->ptr4 = tex->ofs4 + (s32)GAME_ADDR(file);
         tex++;
     }
     mesh = file->meshes;
     for (i = 0; i < file->meshCount; i++) {
-        mesh->tris = (EftSurfTri *)((s32)mesh->tris + (s32)file);
+        mesh->tris = (EftSurfTri *)((s32)mesh->tris + (s32)GAME_ADDR(file));
         mesh++;
     }
 }
@@ -1108,18 +1108,18 @@ void EftSurf_Unrelocate(EftSurfFile *file) {
 
     tex = file->texs;
     for (i = 0; i < file->texCount; i++) {
-        tex->ptr0 = (s32)file - tex->ofs0;
-        tex->ptr4 = (s32)file - tex->ofs4;
+        tex->ptr0 = (s32)GAME_ADDR(file) - tex->ofs0;
+        tex->ptr4 = (s32)GAME_ADDR(file) - tex->ofs4;
         tex++;
     }
     mesh = file->meshes;
     for (i = 0; i < file->meshCount; i++) {
-        mesh->tris = (EftSurfTri *)((s32)mesh->tris - (s32)file);
+        mesh->tris = (EftSurfTri *)((s32)mesh->tris - (s32)GAME_ADDR(file));
         mesh++;
     }
-    file->unkC -= (s32)file;
-    file->texs = (EftSurfTex *)((s32)file->texs - (s32)file);
-    file->meshes = (EftSurfMesh *)((s32)file->meshes - (s32)file);
+    file->unkC -= (s32)GAME_ADDR(file);
+    file->texs = (EftSurfTex *)((s32)file->texs - (s32)GAME_ADDR(file));
+    file->meshes = (EftSurfMesh *)((s32)file->meshes - (s32)GAME_ADDR(file));
     if (file->version != 4) {
         file->meshCount = 0;
         file->texCount = 0;

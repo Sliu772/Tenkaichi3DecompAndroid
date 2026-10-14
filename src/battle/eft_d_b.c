@@ -355,21 +355,21 @@ void EftBurst_RelocateModel(EftBurstModel *model) {
 
     if (model->relocated != 1) {
         model->relocated = 1;
-        model->groups = (EftBurstGroup *)((u8 *)model->groups + (s32)model);
+        model->groups = (EftBurstGroup *)((u8 *)model->groups + (s32)GAME_ADDR(model));
         grp = model->groups;
         if (n > 0) {
             i = n;
             do {
-                grp->verts = (s16 *)((u8 *)grp->verts + (s32)model);
-                grp->tris = (s16 *)((u8 *)grp->tris + (s32)model);
+                grp->verts = (s16 *)((u8 *)grp->verts + (s32)GAME_ADDR(model));
+                grp->tris = (s16 *)((u8 *)grp->tris + (s32)GAME_ADDR(model));
                 grp++;
             } while (--i != 0);
         }
-        model->tex = (EftBurstTex *)((u8 *)model->tex + (s32)model);
+        model->tex = (EftBurstTex *)((u8 *)model->tex + (s32)GAME_ADDR(model));
         tex = model->tex;
         for (i = 0; i < model->texCount; i++) {
-            tex->ptr0 = tex->ofs0 + (s32)model;
-            tex->ptr4 = tex->ofs4 + (s32)model;
+            tex->ptr0 = tex->ofs0 + (s32)GAME_ADDR(model);
+            tex->ptr4 = tex->ofs4 + (s32)GAME_ADDR(model);
             tex++;
         }
     }

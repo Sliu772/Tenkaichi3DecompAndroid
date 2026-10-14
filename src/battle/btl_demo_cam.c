@@ -34,17 +34,17 @@ void DemoCam_FixupAnim(DemoCamAnim *anim) {
     DemoCamChannel *ch;
 
     if (anim->needsFixup != 0) {
-        anim->channels = (DemoCamChannel *)((u8 *)anim->channels + (s32)anim);
-        anim->defaults = (DemoCamPose *)((u8 *)anim->defaults + (s32)anim);
+        anim->channels = (DemoCamChannel *)((u8 *)anim->channels + (s32)GAME_ADDR(anim));
+        anim->defaults = (DemoCamPose *)((u8 *)anim->defaults + (s32)GAME_ADDR(anim));
         if (anim->unk1C != NULL) {
-            anim->unk1C = anim->unk1C + (s32)anim;
+            anim->unk1C = anim->unk1C + (s32)GAME_ADDR(anim);
         }
         if (anim->version < 2) {
             anim->unk1C = NULL;
         }
         ch = anim->channels;
         for (i = 0; i < anim->channelCount; i++) {
-            ch->keys = (DemoCamKey *)((u8 *)ch->keys + (s32)anim);
+            ch->keys = (DemoCamKey *)((u8 *)ch->keys + (s32)GAME_ADDR(anim));
             ch++;
         }
         anim->needsFixup = 0;

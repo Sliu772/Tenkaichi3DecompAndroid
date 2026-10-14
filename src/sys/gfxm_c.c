@@ -671,7 +671,7 @@ f32 FlashDraw_AdjustY(f32 y) {
    pixels are entry 0's (several palettes for one picture). */
 u64 FlashDraw_UploadTex(FlashTex *tex, s32 index, s32 tbp) {
     TexBltPacket pkt = { { 0x10000002, 0, 0, 0x50000002 }, { 0x1000000000008001, 0xE }, 0, 0x50 };
-    TexEntry *clut = (TexEntry *)((index << 6) + (u32)tex);
+    TexEntry *clut = (TexEntry *)((u8 *)tex + (index << 6));
     TexEntry *pix;
     s64 base = tbp;
     u64 tex0;
@@ -679,7 +679,7 @@ u64 FlashDraw_UploadTex(FlashTex *tex, s32 index, s32 tbp) {
     if (clut->pixSize == 0) {
         index = 0;
     }
-    pix = (TexEntry *)((index << 6) + (u32)tex);
+    pix = (TexEntry *)((u8 *)tex + (index << 6));
     pkt.bitbltbuf = (base << 32) | ((u64)pix->pixBlt << 48);
     Dma_AddData(&pkt, sizeof(pkt));
     Dma_AddRef(pix->pix, pix->pixSize);

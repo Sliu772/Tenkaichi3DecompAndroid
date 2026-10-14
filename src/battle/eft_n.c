@@ -1108,7 +1108,7 @@ s32 EftBolt_AllocSegs(EftBolt *bolt, s32 count) {
 
     idx = gEftBoltPool->segNext;
     for (tries = 0; tries < gEftBoltPool->segMax; tries++) {
-        seg = (EftBoltSeg *)(idx * sizeof(EftBoltSeg) + (u32)gEftBoltPool->segs);
+        seg = (EftBoltSeg *)((u8 *)gEftBoltPool->segs + idx * sizeof(EftBoltSeg));
         if (seg->flags == 0) {
             seg->next = NULL;
             if (first) {

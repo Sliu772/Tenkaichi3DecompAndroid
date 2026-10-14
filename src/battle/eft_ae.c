@@ -623,7 +623,7 @@ void EftSprAnim_DrawLayerAt(EftAeMtx *m, EftAeMtx *oriented, Vec4 *objPos, EftSp
     Vec3_Lerp(&pos, &def->keys[key + 1].pos, &def->keys[key].pos, t);
     Vec3_Lerp(&rot, &def->keys[key + 1].rot, &def->keys[key].rot, t);
     Vec3_Lerp(&scale, &def->keys[key + 1].scale, &def->keys[key].scale, t);
-    k = (EftSprKey *)((key << 6) + (u32)def->keys);
+    k = (EftSprKey *)((u8 *)def->keys + (key << 6));
     kn = k + 1;
     ca.x = kn->color[0];
     ca.y = kn->color[1];

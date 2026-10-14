@@ -551,7 +551,7 @@ void Bracket_FillEntrants(LBracket *b) {
         } else {
             for (;;) {
                 /* written as integer arithmetic: `&b->grid[n]` adds the two operands the other way round */
-                cell = (LChrCell *)(Rand_Range(b->gridCount) * sizeof(LChrCell) + (u32)b->grid);
+                cell = (LChrCell *)((u8 *)b->grid + Rand_Range(b->gridCount) * sizeof(LChrCell));
                 if (cell->id <= LCHR_ID_MAX) {
                     chara = cell->id;
                     break;

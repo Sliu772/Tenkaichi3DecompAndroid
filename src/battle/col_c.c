@@ -1018,7 +1018,7 @@ FontGlyph *Font_SearchGlyph(FontSlot *slot, u16 ch) {
 
     while (lo <= hi) {
         mid = lo + (hi - lo) / 2;
-        glyph = (FontGlyph *)(mid * sizeof(FontGlyph) + (u32)glyphs);
+        glyph = (FontGlyph *)((u8 *)glyphs + mid * sizeof(FontGlyph));
         if (glyph->code < ch) {
             lo = mid + 1;
         } else if (ch < glyph->code) {
@@ -1079,12 +1079,12 @@ void Font_SetFont(s32 slot, FontData *data) {
     FontTex *tex;
     FontSlot *s;
 
-    if ((u32)data->tex < (u32)data) {
-        tex = (FontTex *)((u32)data->tex + (u32)data);
+    if (GAME_ADDR(data->tex) < GAME_ADDR(data)) {
+        tex = (FontTex *)((u8 *)data->tex + GAME_ADDR(data));
         data->tex = tex;
-        data->glyphs = (FontGlyph *)((u32)data->glyphs + (u32)data);
-        tex->pixelsPtr = tex->pixels + (s32)data;
-        tex->clutPtr = tex->clut + (s32)data;
+        data->glyphs = (FontGlyph *)((u8 *)data->glyphs + GAME_ADDR(data));
+        tex->pixelsPtr = tex->pixels + (s32)GAME_ADDR(data);
+        tex->clutPtr = tex->clut + (s32)GAME_ADDR(data);
     }
     s = &gFontSlots[slot];
     s->cbp = slot * 0x208 + 0x2A00;

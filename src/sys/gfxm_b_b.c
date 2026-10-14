@@ -24,7 +24,7 @@ void TexChain_WriteTags(TexChain chain) {
 
     for (i = 0; i < chain.count; i++) {
         chain.tags[n++] = DMA_TAG_REF + chain.list[i].size / 16;
-        chain.tags[n++] = (u32)chain.list[i].data;
+        chain.tags[n++] = DMA_TAG_ADDR(chain.list[i].data);
         chain.tags[n++] = 0;
         chain.tags[n++] = 0;
     }

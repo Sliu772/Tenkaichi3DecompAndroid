@@ -243,7 +243,7 @@ s32 StgObj_GetItemPos(Vec4 *out, StgObj *obj, s32 idx) {
 s32 BtlStage_BreakObj(s32 idx, Vec4 *hitPos, StgBreakInfo *info) {
     Vec4 pos;
     StgObj *objs = gBtlStage->objs;
-    StgObj *obj = (StgObj *)(idx * (s32)sizeof(StgObj) + (s32)objs);
+    StgObj *obj = (StgObj *)((u8 *)objs + idx * (s32)sizeof(StgObj));
     StgPart *part = NULL;
     StgPart *p;
     StgPart *q;
@@ -421,7 +421,7 @@ s32 BtlStage_IsObjBroken(s32 idx) {
 
 /* Takes `damage` hit points from object idx; 1 when it has none left (the caller then breaks it). 0 if broken. */
 s32 BtlStage_DamageObj(s32 idx, s32 damage) {
-    StgObj *obj = (StgObj *)(idx * (s32)sizeof(StgObj) + (s32)gBtlStage->objs);
+    StgObj *obj = (StgObj *)((u8 *)gBtlStage->objs + idx * (s32)sizeof(StgObj));
 
     if (obj->state & STG_OBJ_BROKEN) {
         return 0;
@@ -432,7 +432,7 @@ s32 BtlStage_DamageObj(s32 idx, s32 damage) {
 
 /* Type bits of object idx, 0 once it is broken. */
 s32 BtlStage_GetObjType(s32 idx) {
-    StgObj *obj = (StgObj *)(idx * (s32)sizeof(StgObj) + (s32)gBtlStage->objs);
+    StgObj *obj = (StgObj *)((u8 *)gBtlStage->objs + idx * (s32)sizeof(StgObj));
 
     if (obj->state & STG_OBJ_BROKEN) {
         return 0;
@@ -828,7 +828,7 @@ s32 BtlStage_GetStartPlace(s32 side, Vec4 *pos, Vec4 *rot, s32 alt) {
         pos->z = p->pos.z;
         pos->w = 1.0f;
     } else {
-        p = (StgPlace *)(side * (s32)sizeof(StgPlace) + (s32)starts);
+        p = (StgPlace *)((u8 *)starts + side * (s32)sizeof(StgPlace));
         yaw = Stg_CalcYaw(p->pos.x, p->pos.z, p->target.x, p->target.z);
         pos->x = p->pos.x;
         pos->y = -700.0f;
@@ -907,7 +907,7 @@ void StgObj_LoadDef(StgObj *obj, s32 idx) {
     BtlStage *stg = gBtlStage;
 
     if (stg == NULL || stg->data != NULL) {
-        def = (StgObjDef *)(idx * (s32)sizeof(StgObjDef) + (s32)stg->data->objDefs);
+        def = (StgObjDef *)((u8 *)stg->data->objDefs + idx * (s32)sizeof(StgObjDef));
         obj->hp = def->hp;
         obj->type = def->type;
         obj->parent = def->parent;

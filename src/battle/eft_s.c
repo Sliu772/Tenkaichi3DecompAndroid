@@ -564,7 +564,7 @@ s32 EftChain_AllocNodes(EftArcChain *ch, s32 count) {
     EftArcNode *node;
 
     for (; tries < EFT_ARC_NODES; tries++) {
-        node = (EftArcNode *)(idx * sizeof(EftArcNode) + (u32)gEftChain->node);
+        node = (EftArcNode *)((u8 *)gEftChain->node + idx * sizeof(EftArcNode));
         if (node->flags == 0) {
             memset(node, 0, sizeof(EftArcNode));
             if (prev == NULL) {
