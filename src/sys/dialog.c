@@ -51,6 +51,7 @@ extern void Font_SetShadowColor(u32 color);
 extern void Font_SetShadowOffset(s32 x, s32 y);
 extern void Font_SetColorRGBA(s32 r, s32 g, s32 b, s32 a);
 extern void Port_DiagNote(const char *what, long a, long b); /* bring-up (iOS): bt3_log.txt */
+extern s32 Font_GetCmdCount(void);
 extern void Port_DiagBlock(const char *what, const void *p, u32 bytes);
 
 #define DIALOG_TEXT(tbl, i) ((u16 *)((u8 *)(tbl) + ((tbl)[(i) + 1] / 4 * 4)))
@@ -358,6 +359,15 @@ rect.y0 = i * 0x20;
     }
     gDialog->res.tex0 = visible != 0 ? gDialog->tex0 : NULL;
     Flash_Draw(gDialog->flash);
+    {
+        static s32 sQueued = -1;
+        s32 queued = Font_GetCmdCount();
+
+        if (queued != sQueued) {
+            sQueued = queued;
+            Port_DiagNote("dialog: font commands queued before the flush, msgIdx", queued, gDialog->msgIdx);
+        }
+    }
     Font_FlushAll();
 }
 
