@@ -87,7 +87,7 @@ typedef struct ObjVu1Prog2 {
     /* 0x100 */ Mtx44 clip;
 } ObjVu1Prog2;
 extern ObjVu1Prog2 *Vu1Pkt_LoadProg2(s32 alt);
-extern void Vu1Pkt_CallProg6(u32 *chain);
+extern void Vu1Pkt_CallProg6(u32 chain); /* a game address (GAME_ADDR), as the definition in vu1_packet.c takes it */
 extern void Vu1Pkt_LoadProg6(void *view, Mtx44 *mtx, Vec4 *vec);
 
 /* The object draw of the previous file (0x10EC18..0x112A30): queues the object's meshes. */
@@ -756,7 +756,7 @@ void ObjShadow_Draw(ObjMdlObj *obj, ObjShadowCam *view) {
             Dma_AddTexFlush();
             ObjGs_AddShadowTexEnv(0x2A00, 4);
             Vu1Pkt_LoadProg6(view, &work->view, &work->scale);
-            Vu1Pkt_CallProg6(work->pkt[work->flip]);
+            Vu1Pkt_CallProg6(GAME_ADDR(work->pkt[work->flip]));
             Dma_AddTexFlush();
         }
     }

@@ -41,11 +41,11 @@ extern void Mtx_MakeNormalLight(Mtx44 *dst, Vec4 *l0, Vec4 *l1, Vec4 *l2);
 extern void Vu0_InitAxisRegs(void);
 extern void Vu0Screen_StoreMtx(Mtx44 *dst);
 extern void Vu0Clip_StoreMtx(Mtx44 *dst);
-extern ObjDrawPkt *Vu1Pkt_CallProg0(u8 *chain);
+extern ObjDrawPkt *Vu1Pkt_CallProg0(u32 chain); /* a game address (GAME_ADDR), as the definition in vu1_packet.c takes it */
 extern ObjDrawPkt *Vu1Pkt_LoadProg0(void);
-extern ObjDrawPkt *Vu1Pkt_CallProg1(ObjDrawPart *part);
+extern ObjDrawPkt *Vu1Pkt_CallProg1(u32 obj);
 extern ObjDrawPkt *Vu1Pkt_LoadProg1(void);
-extern ObjDrawPkt *Vu1Pkt_CallProg2(ObjDrawPart *part);
+extern ObjDrawPkt *Vu1Pkt_CallProg2(u32 obj);
 extern ObjDrawNode *BtlObj_GetNode(ObjDrawObj *obj, s32 node);
 extern ObjDrawPart *BtlObj_FindBound(ObjDrawObj *obj, s32 node);
 extern s32 BtlObj_GetSubState(ObjDrawObj *obj);
@@ -539,9 +539,10 @@ void ObjDraw_DrawParts(ObjDrawObj *obj, ObjDrawView *view, s32 mode, u64 tex0, u
                         headNode = node;
                         headPart = part;
                     } else {
-                        ObjDrawPkt *pkt = Vu1Pkt_CallProg0((part->node == 0x30 && BtlObj_GetSubState(obj) != -1)
-                                                               ? mdl->chains[BtlObj_GetSubState(obj)]
-                                                               : part->chain);
+                        u8 *chainPtr = (part->node == 0x30 && BtlObj_GetSubState(obj) != -1)
+                                           ? mdl->chains[BtlObj_GetSubState(obj)]
+                                           : (u8 *)part->chain;
+                        ObjDrawPkt *pkt = Vu1Pkt_CallProg0(GAME_ADDR(chainPtr));
 
                         Mtx_Copy(&pkt->mtxB, &node->mtxB);
                         Mtx_Copy(&pkt->mtxA, &node->mtxA);
@@ -555,7 +556,7 @@ void ObjDraw_DrawParts(ObjDrawObj *obj, ObjDrawView *view, s32 mode, u64 tex0, u
                     }
                 } else if (mode == 1) {
                     if (part->flags & 1) {
-                        ObjDrawPkt *pkt = Vu1Pkt_CallProg1(part);
+                        ObjDrawPkt *pkt = Vu1Pkt_CallProg1(GAME_ADDR(part));
 
                         pkt->tex0[0] = tex0;
                         pkt->tex0[1] = tex0 >> 32;
@@ -586,7 +587,7 @@ void ObjDraw_DrawParts(ObjDrawObj *obj, ObjDrawView *view, s32 mode, u64 tex0, u
                         Vu0Clip_StoreMtx(&pkt->clip);
                     }
                 } else if (mode == 2) {
-                    ObjDrawPkt *pkt = Vu1Pkt_CallProg2(part);
+                    ObjDrawPkt *pkt = Vu1Pkt_CallProg2(GAME_ADDR(part));
 
                     Mtx_Copy(&pkt->mtxB, &node->mtxB);
                     Mtx_Copy(&pkt->mtxA, &node->mtxA);
@@ -608,7 +609,7 @@ void ObjDraw_DrawParts(ObjDrawObj *obj, ObjDrawView *view, s32 mode, u64 tex0, u
         if (!noMask) {
             ObjGs_AddFrameMaskOpaque(fbmsk);
         }
-        pkt = Vu1Pkt_CallProg0(headPart->chain);
+        pkt = Vu1Pkt_CallProg0(GAME_ADDR((u8 *)headPart->chain));
         Mtx_Copy(&pkt->mtxB, &headNode->mtxB);
         Mtx_Copy(&pkt->mtxA, &headNode->mtxA);
         Vec4_Copy(&pkt->ofsA, &headPart->ofsA);
