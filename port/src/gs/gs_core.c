@@ -1399,7 +1399,15 @@ static void run_chain(uint32_t tadr, int tte) {
 
     for (guard = 0; guard < 100000; guard++) {
         const uint32_t *tag = (const uint32_t *)Port_A2P(tadr);
-        uint32_t qwc = tag[0] & 0xFFFF, id = (tag[0] >> 28) & 7, addr = tag[1]; /* a host pointer: all 32 bits */
+        uint32_t qwc, id, addr; /* addr: a host pointer, all 32 bits */
+        if (tag == NULL) { /* a call or a next that points at address 0: nothing to walk */
+            static unsigned sNullTag;
+            if (sNullTag++ < 16) {
+                fprintf(stderr, "bt3 gs: frame %u: the DMA chain reached address 0 (depth %u, tag %d), walk stopped\n", sFrame, sp, guard);
+            }
+            break;
+        }
+        qwc = tag[0] & 0xFFFF; id = (tag[0] >> 28) & 7; addr = tag[1];
         const uint32_t *data;
         int end = 0;
 
@@ -1411,6 +1419,17 @@ static void run_chain(uint32_t tadr, int tte) {
         case 5: data = tag + 4; if (sp < 2) { stack[sp++] = tadr + 16 + qwc * 16; } tadr = addr; break; /* CALL */
         case 6: data = tag + 4; if (sp > 0) { tadr = stack[--sp]; } else { end = 1; } break;          /* RET */
         default: data = tag + 4; end = 1; break;                                          /* END */
+        }
+        if (data == NULL && qwc != 0) { /* a REF / REFS / REFE tag whose address is 0: the data it names was never set up. Reading it crashed the game (vif, fighters' chains). Skipped, and the tag is logged. */
+            static unsigned sNullData;
+            if (sNullData++ < 16) {
+                fprintf(stderr, "bt3 gs: frame %u: DMA tag at %08x (id %u, qwc %u, raw %08x %08x %08x %08x) names address 0: skipped (depth %u, tag %d)\n",
+                        sFrame, (unsigned)Port_P2A(tag), id, qwc, tag[0], tag[1], tag[2], tag[3], sp, guard);
+            }
+            if (end) {
+                break;
+            }
+            continue;
         }
         if (id == 3 && qwc >= 1000 && port_tex_diag()) { /* bring-up (iOS): what the chain walk sees in a texture block, printed when it changes (only with BT3_GS_TEXDIAG set: with more than 16 blocks per frame it printed every block of every frame) */
             static uint32_t keyA[16], keyN[16];
