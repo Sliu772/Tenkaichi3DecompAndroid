@@ -1339,7 +1339,13 @@ BtlTaskList *BtlTaskList_Create(BtlTask *parent, u32 count, u32 workSize) {
             return NULL;
         }
     }
+#ifdef __APPLE__
+    /* iOS: a pointer parameter stored straight into the 4-byte field went in as offset + ASLR slide (log 86: parent
+       0xe79bea0 for a group at 0xa6fbea0, slide 0x40a0000), so BtlTask_GetParent(task)->work read NULL. Store the offset. */
+    *(u32 *)&list->parent = GAME_ADDR(parent);
+#else
     list->parent = parent;
+#endif
     list->head = NULL;
     list->tail = NULL;
     list->free = task;
