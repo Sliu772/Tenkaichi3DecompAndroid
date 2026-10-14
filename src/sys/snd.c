@@ -760,32 +760,38 @@ s32 SndHd_GetVagMax(SndBankFile *file) {
     return SndHd_GetVagInfo((u32 *)file + file->hdOfs / 4)->maxNumber;
 }
 
-/* Writes one byte per sample: 1 when it loops. */
+/* Writes one byte per sample: 1 when it loops. Never writes more than SND_VAG_MAX bytes (the callers' buffers are that big). */
 void SndHd_GetLoopFlags(SndBankFile *file, u8 *flags) {
     SndVagInfoChunk *chunk = SndHd_GetVagInfo((u32 *)file + file->hdOfs / 4);
     SndVagParam *param = (SndVagParam *)&chunk->offset[chunk->maxNumber + 1];
+    u32 count = chunk->maxNumber + 1;
     u32 i;
 
-    for (i = 0; i <= chunk->maxNumber; i++) {
-        if (param->loop) {
-            *flags = 1;
-        } else {
-            *flags = 0;
-        }
-        param++;
-        flags++;
+    if (count > SND_VAG_MAX) {
+        count = SND_VAG_MAX;
+    }
+    for (i = 0; i < count; i++) {
+        flags[i] = param[i].loop ? 1 : 0;
     }
 }
 
-/* Packs the loop flags into a bit array (bits are only ever set, so the caller clears it first). */
+/* Packs the loop flags into a bit array: sample n loops = bit n. Writes straight into the bank slot, with no scratch
+   buffer on the stack (a bank with more samples than the scratch buffer held used to overwrite the stack, and the
+   port also passed that stack address through a 4-byte pointer), and never past the bank's loopBits. */
 void SndHd_GetLoopBits(SndBankFile *file, u8 *bits) {
-    u8 flags[SND_VAG_MAX];
-    s32 count = SndHd_GetVagMax(file);
-    s32 i;
+    SndVagInfoChunk *chunk = SndHd_GetVagInfo((u32 *)file + file->hdOfs / 4);
+    SndVagParam *param = (SndVagParam *)&chunk->offset[chunk->maxNumber + 1];
+    u32 count = chunk->maxNumber;
+    u32 i;
 
-    SndHd_GetLoopFlags(file, flags);
+    if (count > SND_LOOP_BITS_MAX) {
+        count = SND_LOOP_BITS_MAX;
+    }
+    for (i = 0; i < SND_LOOP_BYTES; i++) {
+        bits[i] = 0;
+    }
     for (i = 0; i < count; i++) {
-        if (flags[i]) {
+        if (param[i].loop) {
             bits[i / 8] |= 1 << (i % 8);
         }
     }

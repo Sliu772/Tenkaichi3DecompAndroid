@@ -12,6 +12,8 @@
 
 #define SND_BANK_COUNT 8  /* a bank is named by a one-bit mask (1 << slot); slot = Snd_BankIndex(mask) */
 #define SND_QUEUE_MAX 32  /* queued voice commands per frame */
+#define SND_LOOP_BYTES 0x13 /* size of SndBank.loopBits */
+#define SND_LOOP_BITS_MAX (SND_LOOP_BYTES * 8)
 #define SND_VAG_MAX 0x80  /* samples per bank the loop-flag scratch buffer has room for */
 
 /* Bank masks with a special meaning in this file. */
@@ -121,7 +123,7 @@ typedef struct SndBank {
     /* 0x30 */ s32 pending;    /* sample data still has to go to the SPU; the bank cannot play */
     /* 0x34 */ s32 uploading;  /* its transfer is the one in flight */
     /* 0x38 */ u8 vagMax;      /* highest sample number (header's maxVagInfoNumber) */
-    /* 0x39 */ u8 loopBits[0x13]; /* bit n = sample n loops */
+    /* 0x39 */ u8 loopBits[SND_LOOP_BYTES]; /* bit n = sample n loops */
 } SndBank;
 
 /* gSndMgr, 0x2A8 bytes. */
