@@ -1404,6 +1404,21 @@ static void run_chain(uint32_t tadr, int tte) {
         case 6: data = tag + 4; if (sp > 0) { tadr = stack[--sp]; } else { end = 1; } break;          /* RET */
         default: data = tag + 4; end = 1; break;                                          /* END */
         }
+        if (id == 3 && qwc >= 1000) { /* bring-up (iOS): what the chain walk sees in a texture block, printed when it changes */
+            static uint32_t keyA[16], keyN[16];
+            uint32_t k, nz = 0, slot = 0;
+            for (k = 0; k < qwc * 4; k++) {
+                if (data[k] != 0) { nz++; }
+            }
+            for (k = 0; k < 16; k++) {
+                if (keyA[k] == addr || keyA[k] == 0) { slot = k; break; }
+            }
+            if (keyA[slot] != addr || keyN[slot] != nz) {
+                fprintf(stderr, "bt3 gs: frame %u: texture block at %08x (%u words) has %u not zero\n", sFrame, addr, qwc * 4, nz);
+                keyA[slot] = addr;
+                keyN[slot] = nz;
+            }
+        }
         if (sDumpFrame == (int)sFrame) {
             fprintf(stderr, "  dma tag at %08x: id %u qwc %u addr %08x | %08x %08x (depth %u)\n", (unsigned)Port_P2A(tag), id, qwc, addr, tag[2], tag[3], sp);
             if (qwc != 0) { /* bring-up (iOS): what the block really holds: its first words, and how many of its words are not zero */

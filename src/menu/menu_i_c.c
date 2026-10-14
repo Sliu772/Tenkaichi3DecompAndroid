@@ -60,12 +60,34 @@ static void Logo_Probe(const char *when) {
     Port_DiagBlock(when, (u8 *)gLogo->pic + e[0] * 4, (u32)e[2]);
 }
 
+/* bring-up (iOS): says when the number of non-zero words of the first picture changes (and the iteration it happens in) */
+static void Logo_Watch(s32 it, u32 *last) {
+    u32 *e, *w, k, n, nz = 0;
+
+    if (gLogo == NULL) {
+        return;
+    }
+    e = (u32 *)MTEX((MTexRes *)gLogo->pic, 0);
+    w = (u32 *)((u8 *)gLogo->pic + e[0] * 4);
+    n = (u32)e[2] / 4;
+    for (k = 0; k < n; k++) {
+        if (w[k] != 0) {
+            nz++;
+        }
+    }
+    if (nz != *last) {
+        Port_DiagNote("logo pixels: iteration, words not zero", it, (long)nz);
+        *last = nz;
+    }
+}
+
 /*
  * Shows one full-screen picture: optional fade out of what is on screen first, fade in (from black or white),
  * `frames` + 2 frames, fade out (to black or white). The background partition load is polled every frame.
  */
 void Logo_Show(u32 *pack, s32 section, s32 frames, s32 fade, s32 skip, s32 inBlack, s32 outBlack, s32 fadeFirst) {
     s32 it = 0;
+    u32 last = 0xFFFFFFFFu;
 
     Logo_Init(pack, section, frames);
     if (fadeFirst) {
@@ -89,20 +111,21 @@ void Logo_Show(u32 *pack, s32 section, s32 frames, s32 fade, s32 skip, s32 inBla
         ColorFade_StartIn(0xFF, 0xFF, 0xFF, fade);
     }
     while (1) {
-        if (it < 3) { Port_DiagNote("logo loop, iteration", it, section); Logo_Probe("probe: loop top"); }
+        if (it < 1) { Port_DiagNote("logo loop, iteration", it, section); Logo_Probe("probe: loop top"); }
         Gfx_BeginFrame();
         Pad_Update();
         ColorFade_Update();
-        if (it < 3) { Logo_Probe("probe: before Sprite_DrawPicture"); }
+        if (it < 1) { Logo_Probe("probe: before Sprite_DrawPicture"); }
         Sprite_DrawPicture(gLogo->pic, 0, 0, 0x80);
-        if (it < 3) { Logo_Probe("probe: after Sprite_DrawPicture"); }
+        if (it < 1) { Logo_Probe("probe: after Sprite_DrawPicture"); }
         File_WaitPartitionTimeout(2);
-        if (it < 3) { Logo_Probe("probe: after File_WaitPartitionTimeout"); }
+        if (it < 1) { Logo_Probe("probe: after File_WaitPartitionTimeout"); }
         ColorFade_Draw();
         Gfx_EndFrame(1);
-        if (it < 3) { Logo_Probe("probe: after Gfx_EndFrame"); }
+        if (it < 1) { Logo_Probe("probe: after Gfx_EndFrame"); }
         Dma_Flush();
-        if (it < 3) { Logo_Probe("probe: after Dma_Flush"); }
+        if (it < 1) { Logo_Probe("probe: after Dma_Flush"); }
+        Logo_Watch(it, &last);
         it++;
         File_Stub264D90();
         if (ColorFade_IsInDone()) {
