@@ -559,10 +559,23 @@ void BtlRes_CommitReloadEx(void) {
     BtlRes_CommitReload();
 }
 
+#ifdef PORT
+/* iOS: BtlObjWork is bigger with 8-byte pointers than the PS2's BTL_OBJ_WORK_SIZE (0x6B740): the light, vis and res parts lie
+   past that size, so allocating and clearing only BTL_OBJ_WORK_SIZE left them inside the next heap blocks (BtlRes_Init's
+   memset of res wrote over the next block's header: Heap_SearchFromHead then never ended, the watchdog killed the app). */
+#define BTL_OBJ_WORK_ALLOC ((s32)sizeof(BtlObjWork))
+#else
+#define BTL_OBJ_WORK_ALLOC BTL_OBJ_WORK_SIZE
+#endif
+
 /* Allocates the work block and initialises every part of it. */
 void BtlObj_Init(s32 prealloc) {
-    gBtlObjWork = Heap_Alloc(BTL_OBJ_WORK_SIZE, 0x20, 0, HEAP_ANY);
-    memset(gBtlObjWork, 0, BTL_OBJ_WORK_SIZE);
+    gBtlObjWork = Heap_Alloc(BTL_OBJ_WORK_ALLOC, 0x20, 0, HEAP_ANY);
+    memset(gBtlObjWork, 0, BTL_OBJ_WORK_ALLOC);
+#ifdef PORT
+    fprintf(stderr, "bt3 objwork: allocated 0x%x bytes (the PS2 layout's 0x%x), res at +0x%x\n", (unsigned)BTL_OBJ_WORK_ALLOC,
+            (unsigned)BTL_OBJ_WORK_SIZE, (unsigned)((unsigned char *)&gBtlObjWork->res - (unsigned char *)gBtlObjWork));
+#endif
     BtlRes_Init(prealloc);
     BtlObj_InitTable();
     BtlObjPoolE0_Init();
