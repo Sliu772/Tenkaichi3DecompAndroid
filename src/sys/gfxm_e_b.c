@@ -401,7 +401,7 @@ s32 ObjShadow_BuildPacket(u32 *pkt, s32 count, ObjShadowTri *tris, f32 *color) {
         tag[4] = (n << 18) | 0x6C008003;
         *p++ = 0x17000000;
     } while (i < count);
-    n = p - pkt;
+    n = (s32)((GAME_ADDR(p) - GAME_ADDR(pkt)) / 4); /* PORT: p and pkt can be held as different kinds of pointer (an offset and a real address): p - pkt was about -header */
     pad = n % 4;
     if (pad != 0) {
         pad = 4 - pad;
@@ -414,7 +414,7 @@ s32 ObjShadow_BuildPacket(u32 *pkt, s32 count, ObjShadowTri *tris, f32 *color) {
     *p++ = 0;
     *p++ = 0;
     *p++ = 0;
-    pkt[0] = (p - pkt) / 4 + 0x5FFFFFFE;
+    pkt[0] = (GAME_ADDR(p) - GAME_ADDR(pkt)) / 16 + 0x5FFFFFFE;
     return ret;
 }
 
