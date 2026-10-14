@@ -327,6 +327,11 @@ static void hb_dec(char *out, unsigned long long v) { /* 8 digits, zero padded *
 
 static void *heartbeat(void *arg) {
     unsigned long long sec = 0;
+    struct stat beat_sb;
+    /* Stopping the game thread every second to read its registers froze the game at the end of the last three logs
+       (the log ends within a second of a beat, with the game still drawing frames). So by default the beat only
+       reports memory. To get pc/lr/sp/registers again, create an empty file named bt3_beat_regs in Documents. */
+    int beat_regs = stat("bt3_beat_regs", &beat_sb) == 0;
     (void)arg;
     for (;;) {
         arm_thread_state64_t st;
@@ -339,7 +344,7 @@ static void *heartbeat(void *arg) {
 
         sleep(sec < 60 ? 1 : 5);
         sec += sec < 60 ? 1 : 5;
-        if (thread_suspend(sGameThread) == KERN_SUCCESS) {
+        if (beat_regs && thread_suspend(sGameThread) == KERN_SUCCESS) {
             if (thread_get_state(sGameThread, ARM_THREAD_STATE64, (thread_state_t)&st, &cnt) == KERN_SUCCESS) {
                 ok = 1;
                 pc = (unsigned long long)__darwin_arm_thread_state64_get_pc(st);
