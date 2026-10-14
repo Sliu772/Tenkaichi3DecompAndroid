@@ -2243,11 +2243,33 @@ void EftRushShot_UpdateAttached(EftTask *task) {
 }
 
 /* Init callback: clears the work, takes speed and size from the definition and creates the model instance. */
+#ifdef PORT
+#include <stdio.h>
+static void EftRushShot_LogParent(EftTask *task, EftTechArg *arg) {
+    static int n;
+    EftTask *par;
+
+    if (n >= 12) {
+        return;
+    }
+    n++;
+    par = BtlTask_GetParent(task);
+    fprintf(stderr, "bt3 rushshot: init #%d task 0x%x parent 0x%x parent.work 0x%x task.work 0x%x slot %d\n", n,
+            (unsigned)GAME_ADDR(task), (unsigned)GAME_ADDR(par), par != NULL ? (unsigned)GAME_ADDR(par->work) : 0u,
+            (unsigned)GAME_ADDR(task->work), arg != NULL ? (int)arg->slot : -1);
+}
+#endif
+
 void EftRushShot_Init(EftTask *task, EftTechArg *arg) {
-    EftRushShotMgrWork *mgr = BtlTask_GetParent(task)->work;
-    EftRushShotWork *w = task->work;
+    EftRushShotMgrWork *mgr;
+    EftRushShotWork *w;
     EftTechDef *def;
 
+#ifdef PORT
+    EftRushShot_LogParent(task, arg);
+#endif
+    mgr = BtlTask_GetParent(task)->work;
+    w = task->work;
     memset(w, 0, sizeof(EftRushShotWork));
     w->arg = arg;
     def = arg->def;
