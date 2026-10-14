@@ -99,7 +99,11 @@ extern u8 EftEmit_GetHead21(void *set);
 extern u8 EftEmit_GetHead26(void *set);
 extern u8 EftEmit_GetHead22(void *set);
 extern f32 EftEmit_GetHead28(void *set);
+#ifdef PORT
+extern s32 EftEmit_GetEndFrames(void *set); /* the real one returns the whole word; the u8 is for matching */
+#else
 extern u8 EftEmit_GetEndFrames(void *set);
+#endif
 extern void EftEmit_InitState(void *set, void *emit);
 extern void EftEmit_TermState(void *set, void *emit);
 extern s32 EftEmit_GetFlagsFromReq(EftKSet *set, void *emit, s32 objId, s32 group, s32 part, s32 f1, s32 f8);
@@ -1959,7 +1963,12 @@ extern void Vec3_Copy(Vec4 *dst, Vec4 *src);
 extern s32 BtlScene_IsCharStopped(s32 objId);
 extern s32 *BtlScene_GetPackEntry(s32 *base, s32 idx);
 extern s32 *BtlScene_GetCharPackEntry(s32 side, s32 idx);
+/* iOS: these casts exist only to match the original code. ptr32.py turns the pointers of a function-pointer type into 4-byte ones, so
+   on iOS the call passes (and expects back) header OFFSETS while the callee takes ordinary 64-bit pointers: BtlTask_GetParent(task)->work
+   read NULL in EftRushShot_Init (logs 86-88: EftEmit_InitState SKIP, addr 0x31c). With PORT the calls use the declarations above. */
+#ifndef PORT
 #define BtlTask_CreateChildList ((void (*)(EftTask *task, s32 count, s32 workSize))BtlTask_CreateChildList)
+#endif
 
 extern s32 BtlCharApi_GetOpponentObjId(s32 objId);
 extern void BtlCharApi_GetNodePos(s32 objId, s32 node, Vec4 *out);
@@ -1987,42 +1996,88 @@ typedef struct EftSparkTbl {
     s32 v[10];
 } EftSparkTbl;
 
+#ifndef PORT
 #define EftCam_Start ((void (*)(EftRushShotMsg *msg))EftCam_Start)
+#endif
 extern void EftCam_Stop(void);
 extern f32 EftMath_WrapAngle(f32 angle);
+#ifndef PORT
 #define EftAim_GetDir ((void (*)(void *dst, void *src, s32 objId))EftAim_GetDir)
+#endif
+#ifndef PORT
 #define EftAim_GetDirKeep ((void (*)(EftTechArg *arg, Vec4 *dir, Vec4 *pos, s32 objId))EftAim_GetDirKeep)
+#endif
 extern void EftAim_Home(Vec4 *dir, Vec4 *pos, Vec4 *dir2, s32 objId, f32 speed, f32 turn);
 extern s32 EftShot_TestBits(s32 objId, s32 mask);
 extern void EftShot_SetHeldFlagA8(s32 objId);
 extern void EftShot_Nop(s32 size);
+#ifndef PORT
 #define EftEmit_LoadSet ((void (*)(EftTechArg *arg, void *model, s32 a2, s32 *pack, s32 a4, s32 a5))EftEmit_LoadSet)
+#endif
 extern void EftEmit_FreeSet(void *model);
 extern void EftEmit_BeginFrame(void *model);
+#ifndef PORT
 #define EftEmit_GetEndFrames ((s32 (*)(EftModel *model))EftEmit_GetEndFrames)
+#endif
+#ifndef PORT
 #define EftEmit_InitState ((void (*)(void *model, EftModelInst *inst))EftEmit_InitState)
+#endif
+#ifndef PORT
 #define EftEmit_TermState ((void (*)(EftModel *model, EftModelInst *inst))EftEmit_TermState)
+#endif
+#ifndef PORT
 #define EftEmit_GetFlagsFromReq ((s32 (*)(EftModel *model, EftModelInst *inst, s32 objId, s32 part, s32 sub, s32 end, s32 fast))EftEmit_GetFlagsFromReq)
+#endif
+#ifndef PORT
 #define EftEmit_SpawnOwn ((void (*)(EftModel *model, EftModelInst *inst, void *nodes, Vec4 *pos, void *w, s32 part, s32 sub, s32 flags, f32 size))EftEmit_SpawnOwn)
+#endif
+#ifndef PORT
 #define EftEmit_MarkKind6 ((void (*)(EftModel *model, EftModelInst *inst))EftEmit_MarkKind6)
+#endif
+#ifndef PORT
 #define EftEmit_KillAll ((void (*)(EftModel *model, EftModelInst *inst))EftEmit_KillAll)
+#endif
+#ifndef PORT
 #define EftEmit_UpdateAlive ((s32 (*)(EftModel *model, EftModelInst *inst))EftEmit_UpdateAlive)
+#endif
+#ifndef PORT
 #define EftEmit_UpdateNodesReq ((void (*)(EftTechArg *arg, void *nodes))EftEmit_UpdateNodesReq)
+#endif
+#ifndef PORT
 #define EftEmit_UpdateTrailWidth ((void (*)(EftModel *model, EftModelInst *inst))EftEmit_UpdateTrailWidth)
+#endif
+#ifndef PORT
 #define EftEmit_HasWidth2 ((s32 (*)(EftModel *model))EftEmit_HasWidth2)
+#endif
+#ifndef PORT
 #define EftEmit_UpdateWidth2 ((void (*)(EftModel *model, EftModelInst *inst))EftEmit_UpdateWidth2)
+#endif
+#ifndef PORT
 #define EftEmit_GetWidth2 ((f32 (*)(EftModelInst *inst))EftEmit_GetWidth2)
+#endif
 extern void EftTechEvt_RequestStop(s32 objId);
+#ifndef PORT
 #define EftRushShot_AddHitRecord ((void (*)(EftTask *task))EftRushShot_AddHitRecord)
+#endif
+#ifndef PORT
 #define EftRushShot_CreateModels ((void (*)(EftTask *task))EftRushShot_CreateModels)
+#endif
+#ifndef PORT
 #define EftRushShot_UpdateModels ((void (*)(EftTask *task))EftRushShot_UpdateModels)
+#endif
 extern void EftFlash_Start(EftFlashArg *arg);
 extern void *EftStreak_Start(s32 objId, s32 kind, s32 arg2, f32 angle);
 extern void EftDelaySe_Start(s32 objId, EftSparkTbl *tbl, s32 count);
 extern void EftObj_Destroy(s32 handle);
+#ifndef PORT
 #define BtlTask_SetDead ((void (*)(EftTask *task))BtlTask_SetDead)
+#endif
+#ifndef PORT
 #define BtlTask_SetOwnerTag ((void (*)(EftTask *task, s32 flag))BtlTask_SetOwnerTag)
+#endif
+#ifndef PORT
 #define BtlTask_GetParent ((EftTask *(*)(EftTask *task))BtlTask_GetParent)
+#endif
 extern void StgTint_Start(s32 a0, s32 a1, f32 time);
 extern void StgBlur_SetCenter(s32 a0, Vec4 *pos, s32 a2);
 extern void StgBlur_SetColor0Rgba(s32 a0, s32 r, s32 g, s32 b, s32 a);
@@ -2248,16 +2303,16 @@ void EftRushShot_UpdateAttached(EftTask *task) {
 extern u32 BtlTask_ParentField(void *task); /* eft_ae.c: the raw 4 bytes of the task's list parent field */
 static void EftRushShot_LogParent(EftTask *task, EftTechArg *arg) {
     static int n;
-    EftTask *par;
 
     if (n >= 12) {
         return;
     }
     n++;
-    par = BtlTask_GetParent(task);
-    fprintf(stderr, "bt3 rushshot: init #%d task 0x%x parent 0x%x (field 0x%x) parent.work 0x%x task.work 0x%x slot %d\n", n,
-            (unsigned)GAME_ADDR(task), (unsigned)GAME_ADDR(par), BtlTask_ParentField(task),
-            par != NULL ? (unsigned)GAME_ADDR(par->work) : 0u, (unsigned)GAME_ADDR(task->work), arg != NULL ? (int)arg->slot : -1);
+    /* %p of the expressions themselves: GAME_ADDR of a local that holds the call's result is the low half of the address
+       (that is what misled logs 86 / 87), %p of the call is the real pointer. */
+    fprintf(stderr, "bt3 rushshot: init #%d task %p parent %p (field 0x%x) parent.work %p task.work %p slot %d\n", n, (void *)task,
+            (void *)BtlTask_GetParent(task), BtlTask_ParentField(task), BtlTask_GetParent(task)->work, task->work,
+            arg != NULL ? (int)arg->slot : -1);
 }
 #endif
 
