@@ -1003,11 +1003,23 @@ void EftEmit_KillAll(EftEmitSet *set, EftEmitState *state) {
    emitter that is not a one-shot (kind 2). */
 s32 EftEmit_UpdateAlive(EftEmitSet *set, EftEmitState *state) {
     s32 result = 0;
+#ifdef PORT
+    /* iOS bring-up (log 86: crash in EftEmit_UpdateAlive, x0 = 0): a set whose header or group table was never filled
+       (its owner list had lost its parent, fixed in BtlTaskList_Create) faulted here until the SKIP limit killed the
+       app. The set counts as having no live part instead. */
+    EftEmitHdr *hdr = set != NULL ? set->hdr : NULL;
+#else
     EftEmitHdr *hdr = set->hdr;
+#endif
     s32 half;
     s32 type;
     s32 i;
 
+#ifdef PORT
+    if (hdr == NULL) {
+        return 0;
+    }
+#endif
     for (half = 0; half < 2; half++) {
         EftEmitHandles *handles = &state->handle[half];
 
@@ -1016,6 +1028,11 @@ s32 EftEmit_UpdateAlive(EftEmitSet *set, EftEmitState *state) {
                 EftEmitGroup *grp = &set->grp[type];
                 EftEmitGroupDef *gd = grp->def;
 
+#ifdef PORT
+                if (gd == NULL) {
+                    continue;
+                }
+#endif
                 for (i = 0; i < gd->count; i++) {
                     s32 n = grp->first + i;
                     EftEmitDef *def = &set->defs[n];
