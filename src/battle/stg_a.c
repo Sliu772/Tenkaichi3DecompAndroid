@@ -49,6 +49,11 @@ extern f32 Port_WideFactor(void); /* widescreen on PC: 1, or 4/3 for a 16:9 pict
 extern void *memset(void *dst, s32 c, u32 n);
 extern s32 rand(void);
 extern f32 sqrtf(f32 x);
+#ifdef PORT
+#include <stdio.h>
+extern f32 fabsf(f32 x);
+extern f32 fmodf(f32 x, f32 y);
+#endif
 extern f32 atan2f(f32 y, f32 x);
 
 extern void Vec4_Set(Vec4 *dst, f32 x, f32 y, f32 z, f32 w);
@@ -708,6 +713,31 @@ void StgPart_GetPos(StgPart *part, Vec4 *out) {
 
 /* Wraps v into lo..hi by adding or subtracting the span. */
 f32 Stg_WrapRange(f32 lo, f32 hi, f32 v) {
+#ifdef PORT
+    /* iOS bring-up (crash log 12:30:28): a key angle that is inf or huge made the loops below spin until the 10 s
+       scene-update watchdog killed the app (0x8BADF00D in Stg_WrapRange, from StgPart_Animate). v - 6.28 == v once v is
+       big enough, so the loop never ends. Normal angles keep the original loop; others are reduced with fmodf, and
+       inf / a bad span give the middle of the range. The first few are logged: they mean the key data is read wrong. */
+    f32 span = hi - lo;
+
+    if (!(span > 0.0f) || v - v != 0.0f || fabsf(v) > 1000.0f * span) {
+        static int n;
+
+        if (n < 10) {
+            n++;
+            fprintf(stderr, "bt3 stg: WrapRange lo %g hi %g v %g (bits 0x%08X) -> bad angle\n", (double)lo, (double)hi, (double)v,
+                    *(u32 *)&v);
+        }
+        if (!(span > 0.0f) || v - v != 0.0f) {
+            return v == v ? (lo + hi) * 0.5f : 0.0f;
+        }
+        v = lo + fmodf(v - lo, span);
+        if (v < lo) {
+            v += span;
+        }
+        return v;
+    }
+#endif
     if (v < lo) {
         while (lo > v) {
             v += hi - lo;
