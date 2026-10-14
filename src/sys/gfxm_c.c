@@ -1155,9 +1155,9 @@ void Flash_FindLabel(Flash *flash, char *parent, char *name, FlashRef *out) {
 
 /* The clip-list functions of the next file (src/sys/gfxm_d.c), declared here as this file calls them. */
 extern void FlashClipList_GotoLabel(FlashClipList *list, FlashRef *ref, char *label);
-extern void FlashClipList_SetPreDraw(FlashClipList *list, FlashRef *ref, void *fn, void *arg);
-extern void FlashClipList_SetPostDraw(FlashClipList *list, FlashRef *ref, void *fn, void *arg);
-extern void FlashClipList_SetDrawOver(FlashClipList *list, FlashRef *ref, void *fn, void *arg);
+extern void FlashClipList_SetPreDraw(FlashClipList *list, FlashRef *ref, s32 fn, s32 arg);
+extern void FlashClipList_SetPostDraw(FlashClipList *list, FlashRef *ref, s32 fn, s32 arg);
+extern void FlashClipList_SetDrawOver(FlashClipList *list, FlashRef *ref, s32 fn, s32 arg);
 extern void FlashClipList_SetFlags(FlashClipList *list, FlashRef *ref, s32 mask, u8 on);
 extern void FlashClipList_SetOverride(FlashClipList *list, FlashRef *ref, s32 mask, u8 on);
 extern void FlashClipList_SetOffset(FlashClipList *list, FlashRef *ref, s32 x, s32 y);
@@ -1181,21 +1181,21 @@ void Flash_ClipGotoLabel(Flash *flash, FlashRef *ref, char *label) {
 /* Sets a clip's callback run before its children are drawn (FlashClip.preDraw / preArg). */
 void Flash_ClipSetCallbackA(Flash *flash, FlashRef *ref, void *fn, void *arg) {
     if (ref->index >= 0) {
-        FlashClipList_SetPreDraw(flash->clips, ref, fn, arg);
+        FlashClipList_SetPreDraw(flash->clips, ref, (s32)GAME_ADDR(fn), (s32)GAME_ADDR(arg));
     }
 }
 
 /* Sets a clip's callback run after everything of it is drawn (FlashClip.postDraw / postArg). */
 void Flash_ClipSetCallbackB(Flash *flash, FlashRef *ref, void *fn, void *arg) {
     if (ref->index >= 0) {
-        FlashClipList_SetPostDraw(flash->clips, ref, fn, arg);
+        FlashClipList_SetPostDraw(flash->clips, ref, (s32)GAME_ADDR(fn), (s32)GAME_ADDR(arg));
     }
 }
 
 /* Sets a clip's callback run after its children, which gets the clip's drawing state (FlashClip.drawOver). */
 void Flash_ClipSetCallbackC(Flash *flash, FlashRef *ref, void *fn, void *arg) {
     if (ref->index >= 0) {
-        FlashClipList_SetDrawOver(flash->clips, ref, fn, arg);
+        FlashClipList_SetDrawOver(flash->clips, ref, (s32)GAME_ADDR(fn), (s32)GAME_ADDR(arg));
     }
 }
 
