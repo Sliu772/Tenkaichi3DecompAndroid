@@ -17,6 +17,16 @@ extern s32 gDmaBufIdx;
 extern u32 *gDmaCur;
 extern s32 gDmaVif1Started;
 
+#ifdef PORT
+/* bring-up (iOS): the 4-byte address a DMA tag holds for a pointer. A pointer handed in as an argument is an ordinary
+   (64-bit) one, and `(u32)ptr` of that is the low half of its real address, not the offset from the image header the
+   GS walk (Port_A2P) expects: the logo's pixel blocks were read 0x4F00000 bytes away (the slide), as zeros. */
+extern u32 Port_RefAddr(const void *p);
+#define DMA_TAG_ADDR(p) Port_RefAddr(p)
+#else
+#define DMA_TAG_ADDR(p) ((u32)(p))
+#endif
+
 /* Allocates the two 1 MB display-list buffers and points the write cursor at the first. */
 void Dma_InitBuffers(void) {
     gDmaBuf[0] = (u32)Heap_Alloc(DMA_BUF_SIZE, 0x20, 0, HEAP_ANY);
@@ -39,7 +49,7 @@ void Dma_AddRef(void *addr, s32 size) {
     u32 *tag = gDmaCur;
 
     tag[0] = DMA_TAG_REF + size / 16;
-    tag[1] = (u32)addr;
+    tag[1] = DMA_TAG_ADDR(addr);
     tag[2] = 0;
     tag[3] = 0;
     tag += 4;
@@ -51,7 +61,7 @@ void Dma_AddNext(void *addr, u32 *retTag) {
     u32 *tag = gDmaCur;
 
     tag[0] = DMA_TAG_NEXT;
-    tag[1] = (u32)addr;
+    tag[1] = DMA_TAG_ADDR(addr);
     tag[2] = 0;
     tag[3] = 0;
     tag += 4;
