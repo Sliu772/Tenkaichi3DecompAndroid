@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <mach/mach.h>
+#include <os/proc.h> /* os_proc_available_memory */
 
 #include "ios_install.h" /* ios_prepare_data(): installs the game's data from an .iso in Documents */
 
@@ -361,6 +362,12 @@ static void *heartbeat(void *arg) {
         }
         hb_dec(line + 91, mb);
         if (write(2, line, strlen(line)) < 0) {
+        }
+        { /* how much more memory iOS lets the app use before it kills it (0 = at the limit or unknown) */
+            char ml[32] = "bt3 avail 00000000 MB\n";
+            hb_dec(ml + 10, (unsigned long long)os_proc_available_memory() >> 20);
+            if (write(2, ml, strlen(ml)) < 0) {
+            }
         }
         if (ok) { /* where a loop stands: the registers, and the SPU heap table when the game is inside SpuHeap_* */
             char rl[400];

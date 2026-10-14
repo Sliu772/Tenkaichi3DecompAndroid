@@ -27,6 +27,14 @@
 #include <time.h>
 #include "gs_internal.h"
 
+static int port_tex_diag(void) { /* texture block diagnostic: off unless BT3_GS_TEXDIAG is set */
+    static int on = -1;
+    if (on < 0) {
+        on = getenv("BT3_GS_TEXDIAG") != NULL;
+    }
+    return on;
+}
+
 #define SURF_W 1024
 #define SURF_H 1024
 
@@ -1404,7 +1412,7 @@ static void run_chain(uint32_t tadr, int tte) {
         case 6: data = tag + 4; if (sp > 0) { tadr = stack[--sp]; } else { end = 1; } break;          /* RET */
         default: data = tag + 4; end = 1; break;                                          /* END */
         }
-        if (id == 3 && qwc >= 1000) { /* bring-up (iOS): what the chain walk sees in a texture block, printed when it changes */
+        if (id == 3 && qwc >= 1000 && port_tex_diag()) { /* bring-up (iOS): what the chain walk sees in a texture block, printed when it changes (only with BT3_GS_TEXDIAG set: with more than 16 blocks per frame it printed every block of every frame) */
             static uint32_t keyA[16], keyN[16];
             uint32_t k, nz = 0, slot = 0;
             for (k = 0; k < qwc * 4; k++) {
