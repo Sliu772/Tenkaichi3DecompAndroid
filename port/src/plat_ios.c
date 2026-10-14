@@ -36,6 +36,7 @@
 extern int __wrap_main(int argc, char **argv);
 extern int SDL_RunApp(int argc, char *argv[], int (*mainFunction)(int, char *[]), void *reserved);
 extern bool SDL_SetHint(const char *name, const char *value);
+extern bool SDL_AddEventWatch(bool (*filter)(void *userdata, void *event), void *userdata);
 
 #define WINDOW 0x100000000ULL
 
@@ -218,6 +219,61 @@ static void crash(int sig, siginfo_t *si, void *ctx) {
     _exit(128 + sig);
 }
 
+/* Diagnostic: how does the process end when there is no fault message? The three ways that leave no trace in the log
+   are caught here: exit() / return from main, a termination signal (SIGTERM, SIGPIPE ...), and the app lifecycle events
+   SDL receives from iOS (terminating, low memory, background). SIGKILL (jetsam, watchdog) cannot be caught: if none of
+   these lines appears before the log ends, it was SIGKILL. */
+static void log_line(const char *s) {
+    if (write(2, s, strlen(s)) < 0) {
+    }
+}
+
+static void on_exit_log(void) {
+    void *bt[24];
+    int n;
+
+    log_line("bt3 end: exit() or a return from main was called (no signal, not a kill by iOS)\n");
+    n = backtrace(bt, 24);
+    backtrace_symbols_fd(bt, n, 2);
+}
+
+static void on_other_signal(int sig, siginfo_t *si, void *ctx) {
+    static int pipes;
+    char b[128];
+    void *bt[24];
+    int n;
+
+    (void)ctx;
+    if (sig == SIGPIPE && pipes++ >= 5) {
+        return; /* SIGPIPE only ends the process by default: ignored from now on, logged 5 times */
+    }
+    n = snprintf(b, sizeof(b), "bt3 end: signal %d received (sender pid %d, my pid %d)\n", sig, si != NULL ? (int)si->si_pid : -1, (int)getpid());
+    if (write(2, b, (size_t)n) < 0) {
+    }
+    n = backtrace(bt, 24);
+    backtrace_symbols_fd(bt, n, 2);
+    if (sig != SIGPIPE) {
+        _exit(128 + sig);
+    }
+}
+
+static bool life_watch(void *userdata, void *event) {
+    static int lines;
+    uint32_t type = *(uint32_t *)event;
+    char b[96];
+    int n;
+
+    (void)userdata;
+    if ((type >= 0x100 && type < 0x200) && lines++ < 100) { /* SDL3 application events: quit, terminating, low memory, (will) enter background / foreground */
+        n = snprintf(b, sizeof(b), "bt3 life: SDL event 0x%x%s\n", type,
+                     type == 0x100 ? " (QUIT)" : type == 0x101 ? " (TERMINATING)" : type == 0x102 ? " (LOW MEMORY)" :
+                     type == 0x103 ? " (will enter background)" : type == 0x104 ? " (did enter background)" : "");
+        if (write(2, b, (size_t)n) < 0) {
+        }
+    }
+    return true;
+}
+
 static void install_crash_handler(void) {
     static uint8_t altstack[1 << 16];
     stack_t ss;
@@ -236,6 +292,19 @@ static void install_crash_handler(void) {
     for (i = 0; i < sizeof(sigs) / sizeof(sigs[0]); i++) {
         sigaction(sigs[i], &sa, NULL);
     }
+    {
+        static const int other[] = {SIGTERM, SIGHUP, SIGQUIT, SIGPIPE, SIGXCPU};
+        struct sigaction sb;
+
+        memset(&sb, 0, sizeof(sb));
+        sb.sa_sigaction = on_other_signal;
+        sb.sa_flags = SA_SIGINFO | SA_ONSTACK;
+        sigemptyset(&sb.sa_mask);
+        for (i = 0; i < sizeof(other) / sizeof(other[0]); i++) {
+            sigaction(other[i], &sb, NULL);
+        }
+    }
+    atexit(on_exit_log);
 }
 
 __attribute__((constructor(101))) static void Ios_Early(void) {
@@ -454,6 +523,7 @@ static int game_entry(int argc, char *argv[]) {
         setenv("BT3_GS_DUMP", "5300", 1); /* bring-up: list the primitives, registers and uploads of frame 5300 (the start screen, after the intro movie) */
     }
     fprintf(stderr, "bt3 iOS: BT3_GS=%s\n", getenv("BT3_GS"));
+    SDL_AddEventWatch(life_watch, NULL);
     start_heartbeat();
     ios_prepare_data(); /* no gamedata yet: unpack the .iso the user copied into Documents (shows its progress) */
     find_moltenvk();

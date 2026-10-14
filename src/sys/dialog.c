@@ -50,6 +50,8 @@ extern void Font_SetShadowMode(s32 mode);
 extern void Font_SetShadowColor(u32 color);
 extern void Font_SetShadowOffset(s32 x, s32 y);
 extern void Font_SetColorRGBA(s32 r, s32 g, s32 b, s32 a);
+extern void Port_DiagNote(const char *what, long a, long b); /* bring-up (iOS): bt3_log.txt */
+extern void Port_DiagBlock(const char *what, const void *p, u32 bytes);
 
 #define DIALOG_TEXT(tbl, i) ((u16 *)((u8 *)(tbl) + ((tbl)[(i) + 1] / 4 * 4)))
 #define DIALOG_PART(file, i) ((DialogResHdr *)((u8 *)(file) + ((file)[i] / 4 * 4)))
@@ -86,6 +88,17 @@ void Dialog_DrawText(void) {
     alpha = Flash_ClipGetAlpha(flash, &ref);
     str = DIALOG_TEXT(gDialog->msgTbl, gDialog->msgIdx);
     lines = Font_CountLines(str);
+    {
+        static s32 sSeen = -2;
+
+        if (sSeen != gDialog->msgIdx) {
+            sSeen = gDialog->msgIdx;
+            Port_DiagNote("dialog text: msgIdx, lines", gDialog->msgIdx, lines);
+            Port_DiagNote("dialog text: x, y", x, y);
+            Port_DiagNote("dialog text: alpha*1000, label id", (s32)(alpha * 1000.0f), ref.id);
+            Port_DiagBlock("dialog text", str, 32);
+        }
+    }
     switch (gDialog->size) {
     case 0:
         switch (lines) {
@@ -141,7 +154,10 @@ void Dialog_DrawTitle(void) {
     u16 *str;
     f32 alpha;
 
+    static s32 sSeen = -2;
+
     if (gDialog->titleTbl == NULL) {
+        if (sSeen != -3) { sSeen = -3; Port_DiagNote("dialog title: no titleTbl", 0, 0); }
         return;
     }
     if (gDialog->titleIdx < 0) {
@@ -150,11 +166,19 @@ void Dialog_DrawTitle(void) {
     flash = gDialog->flash;
     Flash_FindLabel(flash, NULL, "mc_dummy_text_2", &ref);
     if (ref.id < 0) {
+        if (sSeen != -4) { sSeen = -4; Port_DiagNote("dialog title: label mc_dummy_text_2 not found, id", ref.id, 0); }
         return;
     }
     Flash_ClipGetPos(flash, &ref, &x, &y);
     alpha = Flash_ClipGetAlpha(flash, &ref);
     str = DIALOG_TEXT(gDialog->titleTbl, gDialog->titleIdx);
+    if (sSeen != gDialog->titleIdx) {
+        sSeen = gDialog->titleIdx;
+        Port_DiagNote("dialog title: idx, lines", gDialog->titleIdx, Font_CountLines(str));
+        Port_DiagNote("dialog title: x, y", x, y);
+        Port_DiagNote("dialog title: alpha*1000, label id", (s32)(alpha * 1000.0f), ref.id);
+        Port_DiagBlock("dialog title text", str, 32);
+    }
     Font_PushStyle();
     Font_SetAlign(1);
     Font_SetScaleXY(1.0f, 1.0f);
@@ -176,20 +200,32 @@ void Dialog_DrawBody(void) {
     f32 alpha;
     f32 scale;
 
+    static s32 sSeen = -2;
+
     if (gDialog->titleTbl == NULL) {
+        if (sSeen != -3) { sSeen = -3; Port_DiagNote("dialog body: no titleTbl", 0, 0); }
         return;
     }
     if (gDialog->msgIdx < 0) {
+        if (sSeen != -5) { sSeen = -5; Port_DiagNote("dialog body: msgIdx < 0", gDialog->msgIdx, 0); }
         return;
     }
     flash = gDialog->flash;
     Flash_FindLabel(flash, NULL, "mc_dummy_text_3", &ref);
     if (ref.id < 0) {
+        if (sSeen != -4) { sSeen = -4; Port_DiagNote("dialog body: label mc_dummy_text_3 not found, id", ref.id, 0); }
         return;
     }
     Flash_ClipGetPos(flash, &ref, &x, &y);
     alpha = Flash_ClipGetAlpha(flash, &ref);
     str = DIALOG_TEXT(gDialog->titleTbl, gDialog->msgIdx);
+    if (sSeen != gDialog->msgIdx) {
+        sSeen = gDialog->msgIdx;
+        Port_DiagNote("dialog body: msgIdx, lines", gDialog->msgIdx, Font_CountLines(str));
+        Port_DiagNote("dialog body: x, y", x, y);
+        Port_DiagNote("dialog body: alpha*1000, label id", (s32)(alpha * 1000.0f), ref.id);
+        Port_DiagBlock("dialog body text", str, 32);
+    }
     switch (Font_CountLines(str)) {
     case 1:
         y += 0x28;
