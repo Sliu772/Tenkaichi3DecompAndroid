@@ -1396,6 +1396,7 @@ void Port_GsVif1Chain(uint32_t tadr, int tte) {
 static void run_chain(uint32_t tadr, int tte) {
     uint32_t stack[2], sp = 0;
     int guard;
+    int fresh = 0; /* 1 for the tag a CALL has just jumped to */
 
     for (guard = 0; guard < 100000; guard++) {
         const uint32_t *tag = (const uint32_t *)Port_A2P(tadr);
@@ -1408,6 +1409,8 @@ static void run_chain(uint32_t tadr, int tte) {
             break;
         }
         qwc = tag[0] & 0xFFFF; id = (tag[0] >> 28) & 7; addr = tag[1];
+        const int first = fresh; /* the first tag of a called chain */
+        fresh = 0;
         const uint32_t *data;
         int end = 0;
 
@@ -1416,7 +1419,7 @@ static void run_chain(uint32_t tadr, int tte) {
         case 1: data = tag + 4; tadr += 16 + qwc * 16; break;                             /* CNT */
         case 2: data = tag + 4; tadr = addr; break;                                       /* NEXT */
         case 3: case 4: data = (const uint32_t *)Port_A2P(addr); tadr += 16; break;       /* REF, REFS */
-        case 5: data = tag + 4; if (sp < 2) { stack[sp++] = tadr + 16 + qwc * 16; } tadr = addr; break; /* CALL */
+        case 5: data = tag + 4; if (sp < 2) { stack[sp++] = tadr + 16 + qwc * 16; } tadr = addr; fresh = 1; break; /* CALL */
         case 6: data = tag + 4; if (sp > 0) { tadr = stack[--sp]; } else { end = 1; } break;          /* RET */
         default: data = tag + 4; end = 1; break;                                          /* END */
         }
@@ -1425,6 +1428,19 @@ static void run_chain(uint32_t tadr, int tte) {
             if (sNullData++ < 16) {
                 fprintf(stderr, "bt3 gs: frame %u: DMA tag at %08x (id %u, qwc %u, raw %08x %08x %08x %08x) names address 0: skipped (depth %u, tag %d)\n",
                         sFrame, (unsigned)Port_P2A(tag), id, qwc, tag[0], tag[1], tag[2], tag[3], sp, guard);
+            }
+            if (first && sp > 0) { /* the header of a called packet is not a tag (the shadow packet's first word was seen overwritten): what follows it is the packet's own data (VIF / GIF words), and walking it as tags drew thousands of garbage vertices. Back to the caller. */
+                static unsigned sBadCall;
+                if (sBadCall++ < 4) {
+                    uint32_t k;
+                    fprintf(stderr, "bt3 gs: frame %u: the called packet at %08x has no valid header: back to the caller; its first words:", sFrame, (unsigned)Port_P2A(tag));
+                    for (k = 0; k < 16; k++) {
+                        fprintf(stderr, " %08x", tag[k]);
+                    }
+                    fprintf(stderr, "\n");
+                }
+                tadr = stack[--sp];
+                continue;
             }
             if (end) {
                 break;

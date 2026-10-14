@@ -273,8 +273,13 @@ typedef struct BtlObjPool70Work {
 
 /* Third pool; elements are not touched in this file (ObjShadow_InitPool fills the free list). */
 typedef struct BtlObjPool3Work {
+#ifdef PORT /* iOS: five ObjShadow (sys/gfxm_e.h) of 0x2050 bytes with 8-byte pointers; the 0xA140 of the PS2 layout made this `free` a different list than ObjShadowPool.free */
+    /* 0x0000 */ u8 nodes[0xA190];
+    /* 0xA190 */ SList free;
+#else
     /* 0x0000 */ u8 nodes[0xA140];
     /* 0xA140 */ SList free;
+#endif
     /* 0xA14C */ s32 pad;
 } BtlObjPool3Work; /* size 0xA150 */
 

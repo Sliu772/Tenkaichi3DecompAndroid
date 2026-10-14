@@ -1,3 +1,6 @@
+#ifdef PORT
+#include <stdio.h>
+#endif
 #include "common.h"
 #include "battle/battle.h"
 #include "sys/dma.h"
@@ -58,6 +61,7 @@ extern s32 BtlObjPoolE0_FreeList(SList *list);
 extern ObjShadowPool *BtlObjPool3_Get(void);
 extern ObjShadow *BtlObjPool3_Alloc(void);
 extern s32 BtlObjPool3_Free(ObjShadow *node);
+extern s32 BtlObjPool3_GetFreeCount(void);
 extern void BtlObj_BindTables(ObjMdlObj *obj);
 extern void BtlObj_InitFlags(ObjMdlObj *obj);
 extern void BtlObjXf_Reset(ObjMdlObj *obj);
@@ -753,6 +757,17 @@ void ObjShadow_Draw(ObjMdlObj *obj, ObjShadowCam *view) {
             BtlObjLight_GetColor(&color);
             color.w *= sh->alpha;
             ObjShadow_BuildPacket(work->pkt[work->flip], sh->count, sh->tris, (f32 *)&color);
+#ifdef PORT /* bring-up (iOS): the packet's first word must be a RET tag (0x6.......); printed when it is not (first 8 times) */
+            {
+                static unsigned sBadPkt;
+                u32 *pk = work->pkt[work->flip];
+
+                if ((pk[0] >> 28) != 6 && sBadPkt++ < 8) {
+                    fprintf(stderr, "bt3 shadow: packet %p (flip %d) word 0 is %08x after the build, count %u, work %p, shadow %p\n",
+                            (void *)pk, (int)work->flip, (unsigned)pk[0], (unsigned)sh->count, (void *)work, (void *)sh);
+                }
+            }
+#endif
             Dma_AddTexFlush();
             ObjGs_AddShadowTexEnv(0x2A00, 4);
             Vu1Pkt_LoadProg6(view, &work->view, &work->scale);
@@ -805,6 +820,10 @@ void ObjShadow_InitPool(void) {
         memset(work->pkt[1], 0, size);
         SList_PushFront(&pool->free, &pool->nodes[i].link);
     }
+#ifdef PORT /* bring-up (iOS): the pool the game allocates from (BtlObjPool3_Alloc) must be the list filled here: expect 5 free of 5 */
+    fprintf(stderr, "bt3 shadow pool: %d free of %d, node size 0x%x, free list at 0x%x\n", (int)BtlObjPool3_GetFreeCount(),
+            OBJ_SHADOW_MAX, (unsigned)sizeof(ObjShadow), (unsigned)((u8 *)&pool->free - (u8 *)pool));
+#endif
 }
 
 /* Frees the buffers of the shadow pool. */
