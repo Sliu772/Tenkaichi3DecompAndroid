@@ -116,6 +116,9 @@ extern int gsAnchor;            /* widescreen: which part of the screen the 2D p
 extern int gsDepthByteIsFog;    /* the top byte of the depth page as the game last left it */
 extern unsigned gsNative;       /* native effect markers seen this frame */
 extern unsigned gsSkipped;      /* primitives of PS2-only passes dropped this frame */
+extern unsigned gsVu0Stat[8];   /* fighters' model strips (GsGpu_DrawVu0): calls, resim, full, rejected, drawn, vertices, vu6 calls */
+extern unsigned gsVu0Layer[8];  /* accepted DrawVu0 calls by layer */
+void GsDraw_Vu0Report(void);    /* one "vu0:" line, then the counters restart */
 extern int gGsMainFbp;          /* the frame buffer the game shows (gs_sony.c), -1 before the first swap */
 /* created / spent since the front end last cleared them (gs_core.c's slow-frame report) */
 extern unsigned gGpuNewTex, gGpuNewTexPixels, gGpuNewPipes;

@@ -114,6 +114,15 @@ int gsAnchor;
 int gsDepthByteIsFog;
 unsigned gsNative;
 unsigned gsSkipped;
+unsigned gsVu0Stat[8];
+unsigned gsVu0Layer[8];
+void GsDraw_Vu0Report(void) {
+    fprintf(stderr, "vu0: calls %u resim %u full %u rejected %u drawn %u verts %u vu6calls %u | layers %u %u %u %u %u %u %u %u\n",
+            gsVu0Stat[0], gsVu0Stat[1], gsVu0Stat[2], gsVu0Stat[3], gsVu0Stat[4], gsVu0Stat[5], gsVu0Stat[6],
+            gsVu0Layer[0], gsVu0Layer[1], gsVu0Layer[2], gsVu0Layer[3], gsVu0Layer[4], gsVu0Layer[5], gsVu0Layer[6], gsVu0Layer[7]);
+    memset(gsVu0Stat, 0, sizeof(gsVu0Stat));
+    memset(gsVu0Layer, 0, sizeof(gsVu0Layer));
+}
 unsigned gGpuNewTex, gGpuNewTexPixels, gGpuNewPipes; /* created since the front end last cleared them (slow-frame report) */
 unsigned gGpuTexReplaced; /* textures taken from a texture pack so far */
 uint64_t gGpuTexNs, gGpuPipeNs, gGpuEndNs; /* time spent decoding textures, creating pipelines, in GsGpu_FrameEnd */
@@ -953,6 +962,7 @@ void GsGpu_Draw(int type, int ctx, const GsVertex *v) {
    as floats, a slot the original fills with s, t). A flagged vertex means: the triangle that ends here is not
    drawn (it only joins two real triangles of the strip). */
 void GsGpu_DrawVu6(int ctx, const float *vertices, uint32_t count, const float *consts) {
+    gsVu0Stat[6]++;
     if (gPortResim) { /* a frame that is only being re-run: nothing is drawn */
         return;
     }
@@ -1060,6 +1070,8 @@ void GsGpu_DrawVu4(int ctx, const float *vertices, uint32_t count, const float *
 /* Vertex program 0 as a shader: one strip of the fighters' models (see shaders/vu0.vert and gs_vu1.c). The strip
    becomes a triangle list of the program's own 48-byte vertices; the constants go into a uniform block. */
 void GsGpu_DrawVu0(int layer, int ctx, const float *vertices, uint32_t count, const float *consts) {
+    gsVu0Stat[0]++;
+    gsVu0Stat[1] += gPortResim ? 1u : 0u;
     if (gPortResim) { /* a frame that is only being re-run: nothing is drawn */
         return;
     }
@@ -1070,9 +1082,16 @@ void GsGpu_DrawVu0(int layer, int ctx, const float *vertices, uint32_t count, co
 
     if (count < 3 || gsVuVertCount + count > MAX_VU_VERTS || gsVuIdxCount + (count - 2) * 3 > MAX_VU_IDX || gsDrawCount == MAX_DRAWS ||
         gsVuUniCount == MAX_VU_UNIFORMS) {
+        gsVu0Stat[2]++;
         return;
     }
     if (!draw_state(ctx, 0, 0, 1, &d, &us, &vs)) {
+        static unsigned sRej;
+        gsVu0Stat[3]++;
+        if (sRej++ < 12) {
+            fprintf(stderr, "vu0: rejected: layer %d ctx %d count %u frame %016llx zbuf %016llx tex0 %016llx prim %016llx\n", layer, ctx, count,
+                    (unsigned long long)gGs.frame[ctx], (unsigned long long)gGs.zbuf[ctx], (unsigned long long)gGs.tex0[ctx], (unsigned long long)gGs.prim);
+        }
         return;
     }
     date_snapshot(&d);
@@ -1088,6 +1107,9 @@ void GsGpu_DrawVu0(int layer, int ctx, const float *vertices, uint32_t count, co
     u.misc[1] = (float)((gGs.xyoffset[ctx] >> 32) & 0xFFFF) / 16.0f;
     u.misc[2] = ((gGs.zbuf[ctx] >> 24) & 15) == 0 ? 4294967295.0f : ((gGs.zbuf[ctx] >> 24) & 15) == 1 ? 16777215.0f : 65535.0f;
     u.misc[3] = (float)layer;
+    gsVu0Stat[4]++;
+    gsVu0Stat[5] += count;
+    gsVu0Layer[(unsigned)layer & 7]++;
     u.light2[0] = consts[41]; u.light2[1] = consts[45]; u.light2[2] = consts[49]; u.light2[3] = consts[53];
     d.vu = 1;
     d.first = gsVuIdxCount;
