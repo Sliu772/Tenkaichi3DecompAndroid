@@ -109,6 +109,19 @@ extern void TexFile_UploadAll(void *res, void *tex, void *tex2);
 #define Font_EndPacket ((void (*)(u64 **pkt))Font_EndPacket)                                   /* Dma_EndDirect */
 #define Font_PutSprite ((void (*)(u64 **pkt, s32 x0, s32 y0, s32 x1, s32 y1, s32 u0, s32 v0, s32 u1, s32 v1, u32 color, u64 tex0))Font_PutSprite)                         /* one textured sprite */
 
+#ifdef PORT
+/* PORT (iOS, log 89): the dialog's text is queued (2 commands, flushed every frame) but not one glyph sprite reaches
+   the GS. A queued string used to travel as `(s32)str` inside the command and come back as `(void *)cmd->arg`. On
+   iOS a pointer converted to a 4-byte integer and back does not always give the same pointer (a 4-byte address is an
+   offset from the image header, a pointer held in a register is a real address: plat_ios.c, Port_StorePtr32). The
+   queued strings are kept here as pointers instead, indexed by command, and read back the same way. */
+extern void Port_DiagNote(const char *what, long a, long b);
+extern void Port_DiagBlock(const char *what, const void *p, u32 bytes);
+#define FONT_STR_SLOTS 256
+static void *sFontStr[FONT_STR_SLOTS];
+static void *sFontPendingStr;
+#endif
+
 extern FontCursor gFontCursor; /* 0x31C1C0 */
 extern FontStyle gFontStyle;   /* 0x31C1D0 */
 extern s32 gFontReady;         /* 1 between Font_InitEx and Font_Term */
@@ -151,6 +164,20 @@ void Font_SetCmdCount(s32 count);
 FontCmd *Font_NewCmd(s32 arg, s32 digits, s32 x, s32 y, s32 homeX, s32 kind);
 void Font_SetFont(s32 slot, FontData *data);
 s32 Font_DrawGlyph(u64 **pkt, FontCmd *cmd, s32 x, s32 y, u16 ch);
+
+#ifdef PORT
+/* The string of a queued string command. */
+static void *Font_CmdString(FontCmd *cmd) {
+    s32 idx = (s32)(cmd - gFontCmds);
+
+    if (idx >= 0 && idx < FONT_STR_SLOTS && sFontStr[idx] != NULL) {
+        return sFontStr[idx];
+    }
+    return (void *)cmd->arg;
+}
+#else
+#define Font_CmdString(cmd) ((void *)(cmd)->arg)
+#endif
 
 /* Writes the command's clip box as a GS SCISSOR register. */
 void Font_PutScissor(u64 **pkt, FontCmd *cmd) {
@@ -293,6 +320,30 @@ void Font_Flush(s32 first) {
     s32 i;
 
     if (gFontReady && gFontEnabled && first < gFontCmdCount) {
+#ifdef PORT
+        {
+            static s32 sFlushLog;
+
+            if (sFlushLog < 5) { /* bring-up (iOS): what the printer is about to draw */
+                FontSlot *sl = gFontSlots;
+                s32 k;
+
+                sFlushLog++;
+                Port_DiagNote("font flush: commands, first", gFontCmdCount, first);
+                for (k = 0; k < FONT_SLOT_COUNT; k++, sl++) {
+                    if (sl->data != NULL) {
+                        Port_DiagNote("font slot: index, glyph count", k, sl->data->glyphCount);
+                        Port_DiagBlock("font glyph table", sl->data->glyphs, 24);
+                        Port_DiagBlock("font texture header", sl->data->tex, 64);
+                    }
+                }
+                Port_DiagNote("font flush: first command kind, flags", gFontCmds[first].kind, gFontCmds[first].flags);
+                if (gFontCmds[first].kind == FONT_CMD_STR16) {
+                    Port_DiagBlock("font flush: first string", Font_CmdString(&gFontCmds[first]), 32);
+                }
+            }
+        }
+#endif
         slot = gFontSlots;
         for (i = 0; i < FONT_SLOT_COUNT; i++, slot++) {
             if (slot->data != NULL) {
@@ -460,11 +511,17 @@ FontCmd *Font_AddCmdAt(s32 x, s32 y, s32 arg, s32 digits, s32 kind) {
 
 /* Prints a 16-bit string at the cursor. */
 void Font_Print(u16 *str) {
+#ifdef PORT
+    sFontPendingStr = str;
+#endif
     Font_AddCmd((s32)str, 0, FONT_CMD_STR16);
 }
 
 /* Prints a 16-bit string at a position. */
 void Font_PrintAt(s32 x, s32 y, u16 *str) {
+#ifdef PORT
+    sFontPendingStr = str;
+#endif
     Font_AddCmdAt(x, y, (s32)str, 0, FONT_CMD_STR16);
 }
 
@@ -480,11 +537,17 @@ void Font_PutCharAt(s32 x, s32 y, u16 ch) {
 
 /* Prints an 8-bit string at the cursor. */
 void Font_PrintAscii(char *str) {
+#ifdef PORT
+    sFontPendingStr = str;
+#endif
     Font_AddCmd((s32)str, 0, FONT_CMD_STR8);
 }
 
 /* Prints an 8-bit string at a position. */
 void Font_PrintAsciiAt(s32 x, s32 y, char *str) {
+#ifdef PORT
+    sFontPendingStr = str;
+#endif
     Font_AddCmdAt(x, y, (s32)str, 0, FONT_CMD_STR8);
 }
 
@@ -748,7 +811,7 @@ void Font_DrawCmd(u64 **pkt, FontCmd *cmd) {
         switch (kind) {
         case FONT_CMD_STR16:
         case FONT_CMD_STR8:
-            str = (void *)cmd->arg;
+            str = Font_CmdString(cmd);
             x = Font_AlignLine(cmd, x, str);
             do {
                 if (kind == FONT_CMD_STR16 && cmd->tag != NULL) {
@@ -876,7 +939,7 @@ void Font_AdvanceCursor(FontCmd *cmd) {
     switch (kind) {
     case FONT_CMD_STR16:
     case FONT_CMD_STR8:
-        str = (void *)cmd->arg;
+        str = Font_CmdString(cmd);
         do {
             ch = Font_ReadChar(kind, str);
             str = (u8 *)str + Font_CharSize(kind);
@@ -1071,6 +1134,16 @@ FontCmd *Font_NewCmd(s32 arg, s32 digits, s32 x, s32 y, s32 homeX, s32 kind) {
     cmd->tag = gFontStyle.tag;
     cmd->tagArg = gFontStyle.tagArg;
     cmd->vramBase = -1;
+#ifdef PORT
+    {
+        s32 idx = gFontCmdCount - 1;
+
+        if (idx >= 0 && idx < FONT_STR_SLOTS) {
+            sFontStr[idx] = (kind == FONT_CMD_STR16 || kind == FONT_CMD_STR8) ? sFontPendingStr : NULL;
+        }
+        sFontPendingStr = NULL;
+    }
+#endif
     return cmd;
 }
 
@@ -1079,6 +1152,21 @@ void Font_SetFont(s32 slot, FontData *data) {
     FontTex *tex;
     FontSlot *s;
 
+#ifdef PORT
+    /* PORT (iOS): the file's offsets are added to the file's own address by pointer arithmetic, not through
+       GAME_ADDR(data) (data is a parameter, and an integer made of a parameter pointer can be the low half of its real
+       address, i.e. off by the ASLR slide). The "still an offset" test compares two 4-byte values of the same kind. */
+    if ((u32)(s32)data->tex < (u32)(s32)data) {
+        s32 rawTex = (s32)data->tex;
+        s32 rawGlyphs = (s32)data->glyphs;
+
+        tex = (FontTex *)((u8 *)data + rawTex);
+        data->tex = tex;
+        data->glyphs = (FontGlyph *)((u8 *)data + rawGlyphs);
+        tex->pixelsPtr = (s32)((u8 *)data + tex->pixels);
+        tex->clutPtr = (s32)((u8 *)data + tex->clut);
+    }
+#else
     if (GAME_ADDR(data->tex) < GAME_ADDR(data)) {
         tex = (FontTex *)((u8 *)data->tex + GAME_ADDR(data));
         data->tex = tex;
@@ -1086,6 +1174,7 @@ void Font_SetFont(s32 slot, FontData *data) {
         tex->pixelsPtr = tex->pixels + (s32)GAME_ADDR(data);
         tex->clutPtr = tex->clut + (s32)GAME_ADDR(data);
     }
+#endif
     s = &gFontSlots[slot];
     s->cbp = slot * 0x208 + 0x2A00;
     s->tbp = slot * 0x208 + 0x2A08;
@@ -1122,6 +1211,19 @@ s32 Font_DrawGlyph(u64 **pkt, FontCmd *cmd, s32 x, s32 y, u16 ch) {
     color = cmd->color;
     shadowColor = cmd->shadowColor;
     glyph = Font_FindGlyph(ch, &slot);
+#ifdef PORT
+    {
+        static s32 sMissLog, sHitLog;
+
+        if (glyph == NULL && sMissLog < 8) { /* bring-up (iOS) */
+            sMissLog++;
+            Port_DiagNote("font: glyph not found, code", ch, gFontSlots[0].data != NULL ? gFontSlots[0].data->glyphCount : -1);
+        } else if (glyph != NULL && sHitLog < 4) {
+            sHitLog++;
+            Port_DiagNote("font: glyph drawn, code", ch, x);
+        }
+    }
+#endif
     if (glyph == NULL) {
         return 0;
     }

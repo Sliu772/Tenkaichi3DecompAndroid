@@ -55,6 +55,12 @@ void GsVu1_StateKeep(int restore) {
 
 static unsigned sUnknown[2][128];
 static unsigned sStatRuns, sStatInstr, sStatKicks;
+/* Interpreter limits (log 89: a microprogram that never reaches its END bit ran 4,000,000 instructions per kick and one
+   frame took 15..28 s). A real batch is a few thousand instructions; a run over VU1_RUN_LIMIT, or any run once the
+   frame has used VU1_FRAME_BUDGET, is abandoned (the batch is not drawn) instead of freezing the game. */
+#define VU1_RUN_LIMIT 400000u
+#define VU1_FRAME_BUDGET 6000000u
+static unsigned sStatAbandoned;
 static unsigned sProgSize;
 static unsigned sHle; /* program calls served by shader versions this frame */
 static struct { unsigned size, runs, instr, kicks; } sProg[16]; /* per loaded program, this frame */
@@ -238,13 +244,17 @@ static void run(uint32_t start) {
 
     unsigned slot, before = sStatInstr, kbefore = sStatKicks;
 
+    if (sStatInstr > VU1_FRAME_BUDGET) { /* this frame's interpreter budget is spent */
+        sStatAbandoned++;
+        return;
+    }
     vu.pc = start & 0x7FF;
     sStatRuns++;
     for (slot = 0; slot < 15 && sProg[slot].size != 0 && sProg[slot].size != sProgSize; slot++) {
     }
     sProg[slot].size = sProgSize;
     sProg[slot].runs++;
-    for (guard = 0; guard < 4000000; guard++) {
+    for (guard = 0; guard < VU1_RUN_LIMIT; guard++) {
         uint32_t lo, hi, dest, ft, fs, fd, op, bc, c;
         Reg res, *wr = NULL;
         uint32_t wmask = 0;
@@ -477,13 +487,14 @@ upper_done:
             vu.pc = next;
         }
     }
+    sStatAbandoned++;
     {
         static int reported;
         if (!reported++) {
             uint32_t k, lo2, hi2;
             { FILE *fp = fopen("port/build/vu1_micro.bin", "wb"); if (fp) { fwrite(vu.micro, 1, sizeof(vu.micro), fp); fclose(fp); }
               fp = fopen("port/build/vu1_mem.bin", "wb"); if (fp) { fwrite(vu.mem, 1, sizeof(vu.mem), fp); fclose(fp); } }
-            fprintf(stderr, "vu1: program at %u did not end; pc %u, vi:", start, vu.pc);
+            fprintf(stderr, "vu1: program at %u (%u instructions uploaded) did not end after %u instructions; pc %u, vi:", start, sProgSize, VU1_RUN_LIMIT, vu.pc);
             for (k = 0; k < 16; k++) { fprintf(stderr, " %04x", vu.vi[k]); }
             fprintf(stderr, "\n  top %u tops %u base %u ofst %u itop %u; code around pc:\n", vu.top, vu.tops, vu.base, vu.ofst, vu.itop);
             for (k = (vu.pc > 24 ? vu.pc - 24 : 0); k < vu.pc + 12; k++) {
@@ -789,6 +800,10 @@ void GsVu1_FrameEnd(void) {
             fprintf(stderr, "vu1:   program of %u instructions: %u runs, %u instructions (%u%%), %u kicks\n", sProg[k].size, sProg[k].runs,
                     sProg[k].instr, sStatInstr ? sProg[k].instr * 100 / sStatInstr : 0, sProg[k].kicks);
         }
+    }
+    if (sStatAbandoned != 0) {
+        fprintf(stderr, "vu1: frame %u: %u interpreter runs abandoned (no END bit within %u instructions, or the frame budget of %u was spent)\n", gGsFrame, sStatAbandoned, VU1_RUN_LIMIT, VU1_FRAME_BUDGET);
+        sStatAbandoned = 0;
     }
     sStatRuns = sStatInstr = sStatKicks = 0;
     sHle = 0;
