@@ -1,4 +1,8 @@
 #include "common.h"
+#ifdef PORT
+#include <stdio.h>
+#include <stddef.h>
+#endif
 #include "battle/eft_h.h"
 
 /*
@@ -338,6 +342,23 @@ void EftShot_Start(EftHStartArg *arg) {
     }
     EftShot_SetCurSlot(arg->chr, arg->slot);
     EftTechEvt_Start(s, EftShot_GetLeadTime(s), s->param->life);
+#ifdef PORT
+    {
+        static int n;
+
+        if (n < 10) {
+            n++;
+            fprintf(stderr,
+                    "bt3 shotstart #%d: chr %d slot %d type %d group 0x%x group.children 0x%x group.data 0x%x "
+                    "group.list 0x%x | sizeof HChar 0x%x HSlot 0x%x HTask 0x%x off task 0x%x list 0x%x\n",
+                    n, (int)arg->chr, (int)arg->slot, (int)TYPE_ROW(s->param->type), (unsigned)GAME_ADDR(group),
+                    (unsigned)GAME_ADDR(group->children), (unsigned)GAME_ADDR(group->data),
+                    (unsigned)GAME_ADDR(group->list), (unsigned)sizeof(EftHChar), (unsigned)sizeof(EftHSlot),
+                    (unsigned)sizeof(EftHTask), (unsigned)offsetof(EftHChar, task),
+                    (unsigned)offsetof(EftHChar, list));
+        }
+    }
+#endif
     BtlTaskList_AddTail(group->children, cls, s);
 }
 
