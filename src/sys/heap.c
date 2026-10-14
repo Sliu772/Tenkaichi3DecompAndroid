@@ -14,6 +14,12 @@ extern u8 gHeapDebugFlag;
 extern s32 gHeapDebugUnused;
 extern u8 D_3BE71C[];
 
+#ifdef PORT
+#include <stdio.h>
+/* set when Heap_FindFreeFromHead meets a block header that is not one (the diagnostics below must not walk such a heap) */
+static s32 sHeapCorrupt;
+#endif
+
 #ifdef __APPLE__
 /* iOS: the game's 4-byte addresses are OFFSETS from the image's Mach-O header (port/tools/p32rebase.py). A plain (u32)pointer
    is not one: depending on how the compiler holds the pointer it is the low half of the real address, which carries the
@@ -135,8 +141,39 @@ HeapBlock *Heap_SearchFromHead(s32 size, s32 heap) {
 HeapBlock *Heap_FindFreeFromHead(s32 heap, s32 size) {
     HeapBlock *found = NULL;
     HeapBlock *block;
+#ifdef PORT
+    HeapBlock *prev = NULL;
+    s32 walked = 0;
+#endif
 
     for (block = gHeapStart[heap]; block != NULL; block = Heap_NextBlock(block)) {
+#ifdef PORT
+        /* iOS: a header that is not one (wild write over the heap) made this walk never end (the watchdog killed the app in
+           Heap_SearchFromHead). Stop at the first bad block and say what is there and what precedes it. */
+        if ((u8 *)block < (u8 *)gHeapStart[heap] || (u8 *)block >= (u8 *)gHeapEnd[heap] || block->magic != HEAP_MAGIC ||
+            block->size < 0x20 || (block->size & 3) != 0 || (u8 *)block + block->size > (u8 *)gHeapEnd[heap]) {
+            static s32 sBadLogged;
+
+            sHeapCorrupt = 1;
+            if (sBadLogged < 4) {
+                sBadLogged++;
+                fprintf(stderr, "bt3 heap: corrupt block at offset 0x%x (heap %d, %d blocks walked, asked for 0x%x): ", (unsigned)PTR_ADDR(block),
+                        (int)heap, (int)walked, (unsigned)size);
+                if ((u8 *)block >= (u8 *)gHeapStart[heap] && (u8 *)block < (u8 *)gHeapEnd[heap]) {
+                    fprintf(stderr, "magic %08x used %d size %d data %08x dataSize %d; ", (unsigned)block->magic, (int)block->used,
+                            (int)block->size, (unsigned)block->data, (int)block->dataSize);
+                }
+                if (prev != NULL) {
+                    fprintf(stderr, "previous block at 0x%x: used %d size %d data %08x dataSize %d fromTail %d", (unsigned)PTR_ADDR(prev),
+                            (int)prev->used, (int)prev->size, (unsigned)prev->data, (int)prev->dataSize, (int)prev->fromTail);
+                }
+                fprintf(stderr, "\n");
+            }
+            return NULL;
+        }
+        prev = block;
+        walked++;
+#endif
         if (block->used == 0 && block->size >= size) {
             found = block;
             break;
@@ -276,7 +313,7 @@ void *Heap_Alloc(s32 size, u32 align, s32 fromTail, s32 heap) {
             sAllocDiagN++;
             Port_HeapAllocDiag(size, PTR_ADDR(block), block->data, PTR_ADDR(data));
         }
-        if (block == NULL && size > 0) {
+        if (block == NULL && size > 0 && !sHeapCorrupt) {
             nfree = 0;
             nused = 0;
             freeTotal = 0;
