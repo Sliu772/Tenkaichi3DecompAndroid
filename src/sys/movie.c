@@ -110,7 +110,7 @@ void MovieTag_BuildBlocks(u32 *tags, u8 *image, s32 step, s32 x, s32 y, s32 w, s
             MovieTag_SetGifTag(p->w, 0, 0, 2, 0, 0, eop, 0x40);
             p++;
 #ifdef PORT
-            MovieTag_SetDmaTag(&p->d[0], 0, (u32)image, 0, 3, 0, 0x40); /* the pointer itself, see DMA_PHYS */
+            MovieTag_SetDmaTag(&p->d[0], 0, (s32)DMA_TAG_ADDR(image), 0, 3, 0, 0x40); /* the tag's address, see DMA_TAG_ADDR */
 #else
             MovieTag_SetDmaTag(&p->d[0], 0, (u32)image & 0x0FFFFFFF, 0, 3, 0, 0x40);
 #endif

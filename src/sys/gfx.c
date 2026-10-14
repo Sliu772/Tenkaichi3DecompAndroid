@@ -1,4 +1,5 @@
 #include "common.h"
+#include "sys/dma.h"
 #include "sys/gfx.h"
 #include "sys/debug.h"
 #include "sys/file.h"
@@ -153,7 +154,7 @@ void Gfx_Init(void) {
     memset(&gGfx, 0, sizeof(gGfx));
     sceGsResetPath();
     sceGsResetGraph(0, 1, 2, 1);
-    Dma_SendGif((u32)pkt, 6);
+    Dma_SendGif(DMA_TAG_ADDR(pkt), 6);
     sceGsResetGraph(0, 1, 2, 1);
     sceGsSetDefDBuff(&db, 0, 640, GFX_HEIGHT, 2, GS_PSMZ24, 1);
     FlushCache(0);

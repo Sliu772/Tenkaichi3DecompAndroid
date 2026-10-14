@@ -420,7 +420,7 @@ void GfxClut_InitPacket(GfxClutWork *work, u16 cbp) {
     work->clut = (u8 *)&w[28];
     w[0x488 / 4] = GS_TEXFLUSH;
     w[0x48C / 4] = 0;
-    work->ref[1] = (u32)work;
+    work->ref[1] = DMA_TAG_ADDR(work);
     work->ref[2] = 0;
     work->ref[3] = 0;
     work->end[0] = endTag;

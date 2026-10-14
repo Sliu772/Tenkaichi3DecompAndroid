@@ -80,6 +80,15 @@ extern volatile u32 *Port_DmaChcr(s32 channel);
 #else
 #define DMA_PHYS(a) ((a) & 0x0FFFFFFF)
 #endif
+
+/* bring-up (iOS): the 4-byte address a DMA tag or register holds for a pointer. `(u32)ptr` of an ordinary (64-bit)
+   pointer is the low half of its real address; the GS walk (Port_A2P) expects the offset from the image header. */
+#ifdef PORT
+extern u32 Port_RefAddr(const void *p);
+#define DMA_TAG_ADDR(p) Port_RefAddr(p)
+#else
+#define DMA_TAG_ADDR(p) ((u32)(p))
+#endif
 #define VIF1_STAT ((volatile u32 *)0x10003C00)
 #define GIF_STAT ((volatile u32 *)0x10003020)
 #ifdef PORT /* PC build: every access first completes a transfer that was started (port/src/plat_gs.c) */

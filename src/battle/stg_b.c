@@ -1013,7 +1013,7 @@ void ScrXfade_StoreHalf(s16 sbp, u16 w, u16 h, s32 index) {
     Dbg_AfterStoreImage();
     qwc = w * h * 3 / 16;
     tag[0] = (qwc + 9) | DMA_TAG_REF;
-    tag[1] = (u32)p;
+    tag[1] = DMA_TAG_ADDR(p);
     tag[2] = 0;
     tag[3] = 0;
     tag = (u32 *)(e + 0x20); /* chain[index].end */
