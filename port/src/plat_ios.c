@@ -44,6 +44,22 @@ static uintptr_t hdr(void) {
     return (uintptr_t)&_mh_execute_header;
 }
 
+/* The game's 4-byte pointer fields, written and read here (host code, ordinary pointers) instead of by the game's code:
+ * a pointer parameter that the game stores into a 4-byte field goes in as the low half of its real address (offset + the
+ * ASLR slide), whatever the C looks like (BtlTaskList_Create: log 87 still showed parent = group + slide with
+ * GAME_ADDR in place). The stored value here is always the offset from the header; 0 stays 0. */
+void Port_StorePtr32(void *field, const void *p) {
+    uint32_t off = p == NULL ? 0u : (uint32_t)((uintptr_t)p - hdr());
+
+    *(uint32_t *)field = off;
+}
+
+void *Port_LoadPtr32(const void *field) {
+    uint32_t off = *(const uint32_t *)field;
+
+    return off == 0 ? NULL : (void *)(hdr() + off);
+}
+
 /* End of the image as an offset from the header: the highest end of any segment but __PAGEZERO. */
 static uint64_t image_end(void) {
     const struct mach_header_64 *mh = (const struct mach_header_64 *)&_mh_execute_header;

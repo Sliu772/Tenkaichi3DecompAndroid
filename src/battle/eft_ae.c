@@ -168,6 +168,11 @@ s32 EftSprPack_FindKey(EftSprLayerDef *def, s32 frame);
 f32 EftSprPack_GetKeyT(EftSprLayerDef *def, s32 frame, s32 key);
 s32 EftSprPack_IsValid(EftSprPack *pack);
 void BtlTaskList_Update(BtlTaskList *list);
+#ifdef __APPLE__
+/* port/src/plat_ios.c: 4-byte pointer fields written / read as offsets from the Mach-O header */
+extern void Port_StorePtr32(void *field, const void *p);
+extern void *Port_LoadPtr32(const void *field);
+#endif
 BtlTaskList *BtlTaskList_Create(BtlTask *parent, u32 count, u32 workSize);
 void BtlTaskList_Destroy(BtlTaskList *list);
 BtlTask *BtlTask_AddAfter(BtlTask *task, BtlTaskCls *cls, void *arg);
@@ -1287,7 +1292,8 @@ BtlTaskList *BtlTask_CreateChildList(BtlTask *task, u32 count, u32 workSize) {
 
         if (n < 12) {
             n++;
-            fprintf(stderr, "bt3 childlist: task %p count %u -> list %p\n", (void *)task, count, (void *)list);
+            fprintf(stderr, "bt3 childlist: task %p count %u -> list %p (parent field 0x%x)\n", (void *)task, count, (void *)list,
+                    list != NULL ? *(u32 *)&list->parent : 0u);
         }
     }
 #endif
@@ -1341,8 +1347,10 @@ BtlTaskList *BtlTaskList_Create(BtlTask *parent, u32 count, u32 workSize) {
     }
 #ifdef __APPLE__
     /* iOS: a pointer parameter stored straight into the 4-byte field went in as offset + ASLR slide (log 86: parent
-       0xe79bea0 for a group at 0xa6fbea0, slide 0x40a0000), so BtlTask_GetParent(task)->work read NULL. Store the offset. */
-    *(u32 *)&list->parent = GAME_ADDR(parent);
+       0xe79bea0 for a group at 0xa6fbea0, slide 0x40a0000), so BtlTask_GetParent(task)->work read NULL. GAME_ADDR did
+       not change it (log 87: parent 0x6c03ea0 for a group at 0x46fbea0, slide 0x2508000), so the store is done by host
+       code (port/src/plat_ios.c), which holds the pointer as an ordinary one: the field gets the offset. */
+    Port_StorePtr32(&list->parent, parent);
 #else
     list->parent = parent;
 #endif
@@ -1618,8 +1626,19 @@ BtlTask *BtlTask_GetCurrent(void) {
 
 /* The task that owns the list a task is in. */
 BtlTask *BtlTask_GetParent(BtlTask *task) {
+#ifdef __APPLE__
+    return (BtlTask *)Port_LoadPtr32(&task->list->parent); /* iOS: the field holds an offset from the header, see BtlTaskList_Create */
+#else
     return task->list->parent;
+#endif
 }
+
+#ifdef PORT
+/* Diagnostic (iOS bring-up): the raw 4 bytes of the parent field of the list a task is in. */
+u32 BtlTask_ParentField(void *task) {
+    return *(u32 *)&((BtlTask *)task)->list->parent;
+}
+#endif
 
 /* Allocates the effect VRAM list (from BtlScene_Init). */
 void EftVram_Init(void) {

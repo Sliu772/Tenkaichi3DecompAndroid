@@ -2245,6 +2245,7 @@ void EftRushShot_UpdateAttached(EftTask *task) {
 /* Init callback: clears the work, takes speed and size from the definition and creates the model instance. */
 #ifdef PORT
 #include <stdio.h>
+extern u32 BtlTask_ParentField(void *task); /* eft_ae.c: the raw 4 bytes of the task's list parent field */
 static void EftRushShot_LogParent(EftTask *task, EftTechArg *arg) {
     static int n;
     EftTask *par;
@@ -2254,9 +2255,9 @@ static void EftRushShot_LogParent(EftTask *task, EftTechArg *arg) {
     }
     n++;
     par = BtlTask_GetParent(task);
-    fprintf(stderr, "bt3 rushshot: init #%d task 0x%x parent 0x%x parent.work 0x%x task.work 0x%x slot %d\n", n,
-            (unsigned)GAME_ADDR(task), (unsigned)GAME_ADDR(par), par != NULL ? (unsigned)GAME_ADDR(par->work) : 0u,
-            (unsigned)GAME_ADDR(task->work), arg != NULL ? (int)arg->slot : -1);
+    fprintf(stderr, "bt3 rushshot: init #%d task 0x%x parent 0x%x (field 0x%x) parent.work 0x%x task.work 0x%x slot %d\n", n,
+            (unsigned)GAME_ADDR(task), (unsigned)GAME_ADDR(par), BtlTask_ParentField(task),
+            par != NULL ? (unsigned)GAME_ADDR(par->work) : 0u, (unsigned)GAME_ADDR(task->work), arg != NULL ? (int)arg->slot : -1);
 }
 #endif
 
