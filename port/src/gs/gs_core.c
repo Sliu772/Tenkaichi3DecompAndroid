@@ -1024,29 +1024,23 @@ static void vif(const uint32_t *w, uint32_t count) {
             fprintf(stderr, "  vif %02x num %3u imm %04x\n", cmd, num, imm);
         }
         switch (cmd) {
-case 0x01: GsVu1_SetCycle(imm & 0xFF, (imm >> 8) & 0xFF); break;
-case 0x02: GsVu1_SetOffset(imm); break;
-case 0x03: GsVu1_SetBase(imm); break;
-case 0x04: GsVu1_SetItop(imm); break;
-case 0x05: GsVu1_SetMode(imm); break;
-case 0x14: case 0x15: GsVu1_Call((int)imm); break;
-case 0x17: GsVu1_Call(-1); break;
-case 0x20: need = 1; break;
-case 0x30: case 0x31: need = 4; break;
-case 0x4A: 
-    need = (num ? num : 256) * 2; 
-    if (need > 2048) need = 2048; 
-    break;
-case 0x50: case 0x51: direct = imm ? imm : 65536; break;
-default:
-    if (cmd >= 0x60) {
-        need = GsVu1_UnpackWords(cmd, num);
-        if (need > 2048) {
-            need = 2048;
+        case 0x01: GsVu1_SetCycle(imm & 0xFF, (imm >> 8) & 0xFF); break;
+        case 0x02: GsVu1_SetOffset(imm); break;
+        case 0x03: GsVu1_SetBase(imm); break;
+        case 0x04: GsVu1_SetItop(imm); break;
+        case 0x05: GsVu1_SetMode(imm); break;
+        case 0x14: case 0x15: GsVu1_Call((int)imm); break;
+        case 0x17: GsVu1_Call(-1); break;
+        case 0x20: need = 1; break;
+        case 0x30: case 0x31: need = 4; break;
+        case 0x4A: need = (num ? num : 256) * 2; break;
+        case 0x50: case 0x51: direct = imm ? imm : 65536; break;
+        default:
+            if (cmd >= 0x60) {
+                need = GsVu1_UnpackWords(cmd, num);
+            }
+            break;
         }
-    }
-    break;
-}
     }
 }
 
