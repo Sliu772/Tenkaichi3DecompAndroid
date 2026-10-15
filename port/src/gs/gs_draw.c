@@ -203,6 +203,47 @@ static void tex_diag(const char *why, uint64_t t0, uint32_t c) {
     }
 }
 
+/* fix59: a TEX0 that cannot be real. The GS allows TW/TH 0..10 (up to 1024 texels) and a fixed list of PSMs; the logs of
+   the crashes show bursts of TEX0 values that are bytes of text ("__DATA_"), each one different, each making a new texture
+   of up to 4 MB: 300 to 800 of them in one frame took 1 GB. A draw that uses one is skipped. */
+static int tex0_invalid(uint64_t t0) {
+    uint32_t psm = (uint32_t)((t0 >> 20) & 0x3F), tw = (uint32_t)((t0 >> 26) & 15), th = (uint32_t)((t0 >> 30) & 15);
+    if (tw > 10 || th > 10) {
+        return 1;
+    }
+    switch (psm) {
+    case 0: case 1: case 2: case 10: case 19: case 20: case 27: case 36: case 44: case 48: case 49: case 50: case 58:
+        return 0;
+    default:
+        return 1;
+    }
+}
+
+static void tex_bad(uint64_t t0, const char *why) {
+    static unsigned lastFrame = ~0u, perFrame, shown, summaries;
+    if (lastFrame != gGsFrame) {
+        if (perFrame != 0 && summaries < 60) {
+            summaries++;
+            fprintf(stderr, "bt3 texdiag: frame %u: %u draws skipped (%s)\n", lastFrame, perFrame, why);
+        }
+        lastFrame = gGsFrame;
+        perFrame = 0;
+    }
+    perFrame++;
+    if (shown < 24) {
+        shown++;
+        fprintf(stderr, "bt3 texdiag: frame %u impossible TEX0, draw skipped (%s): tex0 %016llx tbp %u psm %u tw %u th %u\n", gGsFrame, why,
+                (unsigned long long)t0, (unsigned)(t0 & 0x3FFF), (unsigned)((t0 >> 20) & 0x3F), (unsigned)((t0 >> 26) & 15), (unsigned)((t0 >> 30) & 15));
+    }
+}
+
+/* fix59: how many pixels of the game's own textures one frame may decode. The biggest normal frame in the logs is 2.1 M
+   pixels; the bursts before the crashes are 10 to 150 M. Over the budget, the draws that need a new texture are skipped. */
+#define TEX_FRAME_PIXELS 16000000u
+static int sTexSkip;           /* set by texture_get: the draw should not be made */
+static unsigned sNewFrame, sNewPixels;
+static unsigned sFullFrame = ~0u; /* the frame in which the cache was found full after a sweep */
+
 static GsTex texture_get(int ctx) {
     uint64_t t0 = gGs.tex0[ctx] & 0x1FFFFFFFFFFFFFFFull, texa = gGs.texa;
     uint32_t tbp = t0 & 0x3FFF, tbw = (t0 >> 14) & 0x3F, psm = (t0 >> 20) & 0x3F, tw = 1u << ((t0 >> 26) & 15), th = 1u << ((t0 >> 30) & 15);
@@ -245,6 +286,9 @@ static GsTex texture_get(int ctx) {
             h = (h + 1) & (TEX_BUCKETS - 1);
         }
     }
+    if (sFullFrame == gGsFrame && !gGsTrimTextures) {
+        return gsWhite; /* fix59: already found full after a sweep in this frame: no new sweep per texture */
+    }
     if (sBackend->texSlotsLeft() <= 0) {
         tex_diag("no texture slots left, white", t0, 0);
         return gsWhite;
@@ -279,9 +323,10 @@ static GsTex texture_get(int ctx) {
             }
             sTexBucket[h] = (uint16_t)(i + 1);
         }
-        if (gsTexCount >= TEX_CAP) {
-            tex_diag("texture cache full, white", t0, 0);
-            return gsWhite; /* this one frame uses more textures than the cache holds */
+        if (gsTexCount >= TEX_CAP || sTexBytes > TEX_BYTES_CAP) { /* fix59: the size cap counted only before the sweep, never after it */
+            sFullFrame = gGsFrame;
+            tex_diag(gsTexCount >= TEX_CAP ? "texture cache full, white" : "texture memory cap reached, white", t0, 0);
+            return gsWhite; /* this one frame uses more textures (or bytes) than the cache holds */
         }
     }
     tex_t0 = gpu_now();
@@ -315,6 +360,18 @@ static GsTex texture_get(int ctx) {
                 TexPack_Free(&pack);
             }
         }
+    }
+    if (!replaced) { /* fix59: the frame's budget of newly decoded pixels */
+        if (gGsFrame != sNewFrame) {
+            sNewFrame = gGsFrame;
+            sNewPixels = 0;
+        }
+        if (sNewPixels >= TEX_FRAME_PIXELS) {
+            sTexSkip = 1;
+            tex_bad(t0, "pixel budget of the frame spent");
+            return gsWhite;
+        }
+        sNewPixels += tw * th;
     }
     px = replaced ? NULL : malloc((size_t)tw * th * 4);
     for (y = 0; !replaced && y < th; y++) {
@@ -651,6 +708,11 @@ static int draw_state(int ctx, int topo, int sprite, int vu, GsDraw *d, float *u
     if (!tme && sprite) {
         gsTargets[d->target].stale = 0; /* cleared by the game: what is drawn into it from here on is real */
     }
+    if (tme && tex0_invalid(t0)) { /* fix59: garbage in TEX0 (see tex0_invalid) */
+        tex_bad(t0, "TW/TH or PSM not valid");
+        gsSkipped++;
+        return 0;
+    }
     if (tme) {
         int kept = 0;
         src = GsDraw_TargetGet((uint32_t)((t0 & 0x3FFF) / 32), 0);
@@ -710,6 +772,11 @@ static int draw_state(int ctx, int topo, int sprite, int vu, GsDraw *d, float *u
             *vs = th / (float)gsTargetH;
         } else {
             d->tex = texture_get(ctx);
+            if (sTexSkip) { /* fix59: over the frame's pixel budget */
+                sTexSkip = 0;
+                gsSkipped++;
+                return 0;
+            }
         }
     }
     d->sampler = (int)((gGs.tex1[ctx] >> 5) & 1) | ((cl & 3) ? 2 : 0) | (((cl >> 2) & 3) ? 4 : 0);

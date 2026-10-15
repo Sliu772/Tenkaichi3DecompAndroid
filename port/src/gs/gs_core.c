@@ -801,6 +801,32 @@ static void prim_update(void) {
     gs.prim = (gs.prmodecont & 1) ? gs.primRaw : (gs.primRaw & 7) | (gs.prmode & 0x7F8);
 }
 
+/* fix59 (bring-up, iOS): where a TEX0 that cannot be real came from. Gs_Gif notes the run it is walking and the tag it is in;
+   reg_write prints them the first few times (the values that reach the draw code are skipped there, gs_draw.c). */
+static const uint8_t *sDiagRun, *sDiagAt;
+static uint32_t sDiagQwc;
+static uint64_t sDiagTagLo, sDiagTagHi;
+
+static void tex0_source_diag(uint32_t addr, uint64_t d) {
+    static unsigned shown;
+    uint32_t tw = (uint32_t)((d >> 26) & 15), th = (uint32_t)((d >> 30) & 15);
+    if ((tw <= 10 && th <= 10) || shown >= 12) {
+        return;
+    }
+    shown++;
+    fprintf(stderr, "bt3 gs: frame %u: TEX0_%u = %016llx (tw %u th %u), written from a GIF run of %u qwords at %08x (host %p), now at %08x; tag %016llx %016llx\n",
+            sFrame, addr - 6, (unsigned long long)d, tw, th, sDiagQwc, (unsigned)Port_P2A(sDiagRun), (const void *)sDiagRun,
+            (unsigned)Port_P2A(sDiagAt), (unsigned long long)sDiagTagLo, (unsigned long long)sDiagTagHi);
+    if (sDiagAt != NULL) {
+        const uint32_t *w = (const uint32_t *)sDiagAt;
+        fprintf(stderr, "bt3 gs:   data at the write:  %08x %08x %08x %08x\n", w[0], w[1], w[2], w[3]);
+    }
+    if (sDiagRun != NULL) {
+        const uint32_t *w = (const uint32_t *)sDiagRun;
+        fprintf(stderr, "bt3 gs:   start of the run:    %08x %08x %08x %08x\n", w[0], w[1], w[2], w[3]);
+    }
+}
+
 static void reg_write(uint32_t addr, uint64_t d) {
     sStat[4]++;
     if (sDumpFrame == (int)sFrame && (addr == 0x4C || addr == 0x4D || addr == 0x18 || addr == 0x19 || addr == 0x40 || addr == 0x41 ||
@@ -814,7 +840,7 @@ static void reg_write(uint32_t addr, uint64_t d) {
     case 0x03: gs.uv = d; break;
     case 0x04: vertex(d & 0xFFFF, (d >> 16) & 0xFFFF, (uint32_t)((d >> 32) & 0xFFFFFF), 1); break;
     case 0x05: vertex(d & 0xFFFF, (d >> 16) & 0xFFFF, (uint32_t)(d >> 32), 1); break;
-    case 0x06: case 0x07: gs.tex0[addr - 6] = d; break;
+    case 0x06: case 0x07: tex0_source_diag(addr, d); gs.tex0[addr - 6] = d; break;
     case 0x08: case 0x09: gs.clamp[addr - 8] = d; break;
     case 0x0C: vertex(d & 0xFFFF, (d >> 16) & 0xFFFF, (uint32_t)((d >> 32) & 0xFFFFFF), 0); break;
     case 0x0D: vertex(d & 0xFFFF, (d >> 16) & 0xFFFF, (uint32_t)(d >> 32), 0); break;
@@ -855,13 +881,18 @@ void Gs_Gif(const uint8_t *p, uint32_t qwc) {
     static uint32_t loops, reg;     /* loops left, register index within the loop */
     const uint64_t *q = (const uint64_t *)p;
 
+    sDiagRun = p; /* fix59 */
+    sDiagQwc = qwc;
     while (qwc != 0) {
         uint32_t flg, nreg;
 
+        sDiagAt = (const uint8_t *)q; /* fix59 */
         if (loops == 0) {
             sStat[3]++;
             tag_lo = q[0];
             tag_hi = q[1];
+            sDiagTagLo = tag_lo;
+            sDiagTagHi = tag_hi;
             q += 2;
             qwc--;
             loops = tag_lo & 0x7FFF;
