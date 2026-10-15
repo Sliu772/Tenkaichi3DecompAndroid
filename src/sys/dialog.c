@@ -52,6 +52,9 @@ extern void Font_SetShadowOffset(s32 x, s32 y);
 extern void Font_SetColorRGBA(s32 r, s32 g, s32 b, s32 a);
 extern void Port_DiagNote(const char *what, long a, long b); /* bring-up (iOS): bt3_log.txt */
 extern s32 Font_GetCmdCount(void);
+#ifdef __APPLE__
+extern void Port_FontStrSet(const void *p);
+#endif
 extern void Port_DiagBlock(const char *what, const void *p, u32 bytes);
 
 #define DIALOG_TEXT(tbl, i) ((u16 *)((u8 *)(tbl) + ((tbl)[(i) + 1] / 4 * 4)))
@@ -142,6 +145,9 @@ void Dialog_DrawText(void) {
     Font_SetShadowMode(2);
     Font_SetShadowOffset(1, 2);
     Font_SetShadowColor(((u32)(alpha * 64.0f) << 24) | 0x202020);
+    #ifdef __APPLE__
+    Port_FontStrSet(str);
+    #endif
     Font_PrintAt(x, y, str);
     Font_PopStyle();
 }
@@ -187,6 +193,9 @@ void Dialog_DrawTitle(void) {
     Font_SetShadowMode(2);
     Font_SetShadowOffset(1, 2);
     Font_SetShadowColor(((u32)(alpha * 64.0f) << 24) | 0x202020);
+    #ifdef __APPLE__
+    Port_FontStrSet(str);
+    #endif
     Font_PrintAt(x, y, str);
     Font_PopStyle();
 }
@@ -255,6 +264,9 @@ void Dialog_DrawBody(void) {
     Font_SetShadowMode(2);
     Font_SetShadowOffset(1, 2);
     Font_SetShadowColor(((u32)(alpha * 64.0f) << 24) | 0x202020);
+    #ifdef __APPLE__
+    Port_FontStrSet(str);
+    #endif
     Font_PrintAt(x, y, str);
     Font_PopStyle();
 }

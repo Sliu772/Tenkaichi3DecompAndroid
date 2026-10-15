@@ -617,3 +617,10 @@ int main(int argc, char **argv) {
     return SDL_RunApp(argc, argv, game_entry, NULL);
 }
 #endif
+
+
+/* fix66: a string pointer handed to a game function as a PARAMETER arrives shifted by the ASLR slide (fix60/61 logs).
+   Host code keeps it in a plain 64-bit static instead; Font_PrintAt takes it from here. */
+static const void *sFontDirectStr;
+void Port_FontStrSet(const void *p) { sFontDirectStr = p; }
+const void *Port_FontStrTake(void) { const void *p = sFontDirectStr; sFontDirectStr = NULL; return p; }

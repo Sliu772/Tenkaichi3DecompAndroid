@@ -217,8 +217,9 @@ s32 Font_DrawGlyph(u64 **pkt, FontCmd *cmd, s32 x, s32 y, u16 ch);
 
 #ifdef PORT
 /* The string of a queued string command. */
+static s32 sFontDrawIdx = -1; /* fix66: index of the command being drawn, set by Font_Flush (cmd - gFontCmds is wrong in the iOS build) */
 static void *Font_CmdString(FontCmd *cmd) {
-    s32 idx = (s32)(cmd - gFontCmds);
+    s32 idx = sFontDrawIdx >= 0 ? sFontDrawIdx : (s32)(cmd - gFontCmds);
 
     if (idx >= 0 && idx < FONT_STR_SLOTS && sFontStr[idx] != 0) {
         return FONT_STR_LOAD(sFontStr[idx]);
@@ -412,7 +413,9 @@ void Font_Flush(s32 first) {
         for (i = first; i < gFontCmdCount; i++, cmd++) {
             Font_PutScissor(&pkt, cmd);
             Font_OpenSpriteTag(&pkt, &tag);
+            sFontDrawIdx = i;
             Font_DrawCmd(&pkt, cmd);
+            sFontDrawIdx = -1;
             Font_CloseSpriteTag(&pkt, &tag);
         }
         Font_EndPacket(&pkt);
@@ -597,6 +600,16 @@ void Font_Print(u16 *str) {
 /* Prints a 16-bit string at a position. */
 void Font_PrintAt(s32 x, s32 y, u16 *str) {
 #ifdef PORT
+#ifdef __APPLE__
+    {
+        extern const void *Port_FontStrTake(void);
+        const void *direct = Port_FontStrTake();
+
+        if (direct != NULL) {
+            str = (u16 *)direct; /* fix66: the pointer as the caller had it, not the one that came in as a parameter */
+        }
+    }
+#endif
     str = (void *)Font_FixStr(str, FONT_CMD_STR16);
     FONT_STR_STORE(sFontPendingStr, str);
 #endif
