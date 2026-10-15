@@ -1,5 +1,8 @@
 #include "common.h"
 #include "battle/btl_capi_a.h"
+#ifdef PORT
+extern void Port_DiagNote(const char *what, long a, long b);
+#endif
 
 /*
  * Fighter interface, first part: 0x204E78..0x207020. 81 accessors keyed by battle object id (a few by roster
@@ -525,6 +528,16 @@ void BtlCharApi_GetNodePos(s32 objId, s32 node, Vec4 *out) {
             Vec4_Copy(out, (Vec4 *)&n->mtx.m[3]);
             return;
         }
+#ifdef PORT
+        {
+            static s32 sMiss; /* fix69: the node is missing and the effect starts at the object (the feet) instead of the hand */
+
+            if (sMiss < 30) {
+                sMiss++;
+                Port_DiagNote("node missing, effect placed at the object: object id, node", objId, node);
+            }
+        }
+#endif
         Vec4_Copy(out, &obj->pos);
     }
     if (obj == NULL) {
