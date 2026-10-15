@@ -1611,8 +1611,34 @@ void BtlTask_SetPos(BtlTask *task, EftAeVec pos) {
 
 #ifdef PORT
 extern int BtlPool_Contains(s32 slot, const void *p); /* btl_pool.c */
-extern void Port_DiagNote(const char *what, long a, long b);
 static s32 sSweepKilled;
+extern void Port_DiagNote(const char *what, long a, long b);
+
+/* Which battle pool (0..8) holds `p`, -1 for none. */
+static s32 EftDiag_PoolOf(const void *p) {
+    s32 s;
+
+    for (s = 0; s < 9; s++) {
+        if (BtlPool_Contains(s, p)) {
+            return s;
+        }
+    }
+    return -1;
+}
+BtlTask *BtlTask_GetParent(BtlTask *task);
+
+/* 1 when `cur` is `task` or lies inside its child lists: such a task is running now and must not be removed from under itself. */
+static s32 BtlTask_IsRunningIn(BtlTask *task, BtlTask *cur) {
+    s32 depth = 0;
+
+    while (cur != NULL && depth++ < 16) {
+        if (cur == task) {
+            return 1;
+        }
+        cur = BtlTask_GetParent(cur);
+    }
+    return 0;
+}
 
 static void BtlTaskList_SweepPool(BtlTaskList *list, s32 slot, BtlTask *skip) {
     BtlTask *task = list->head;
@@ -1620,13 +1646,19 @@ static void BtlTaskList_SweepPool(BtlTaskList *list, s32 slot, BtlTask *skip) {
 
     while (task != NULL) {
         next = task->next;
-        if (task != skip) {
+        if (task != skip && !BtlTask_IsRunningIn(task, gBtlTaskCur)) {
             if (BtlPool_Contains(slot, task->work) || BtlPool_Contains(slot, task)) {
-                if (!BTL_TASK_BITS(task)->dead) {
-                    BtlTask_SetDead(task); /* removed (term callback included) by the next update pass, while the memory is still intact */
-                    sSweepKilled++;
+                {
+                    static s32 sShown;
+
+                    if (sShown < 40) { /* class: offset from BtlTask_Kill (find the table in the link map); tag: owner bits, 0x800 / 0x1000 are reached by BtlScene_Reset */
+                        sShown++;
+                        Port_DiagNote("effects: orphan task killed, class offset, tag", (long)((u8 *)task->cls - (u8 *)&BtlTask_Kill), (long)task->tag);
+                    }
                 }
-            } else if (task->child != NULL && !BTL_TASK_BITS(task)->dead) {
+                BtlTask_Kill(task); /* at once, term callback included, while its memory is intact: a deferred kill ran one more update first */
+                sSweepKilled++;
+            } else if (task->child != NULL) {
                 BtlTaskList_SweepPool(task->child, slot, skip);
             }
         }
@@ -1634,21 +1666,16 @@ static void BtlTaskList_SweepPool(BtlTaskList *list, s32 slot, BtlTask *skip) {
     }
 }
 
-/* A fighter's effect layer is torn down when its model is replaced (transformation, fusion, member switch) and its pool
-   (slot 7 / 8) is rewound. Tasks of that fighter that BtlScene_Reset did not reach (the ones never tagged with the owner
-   bits: emitter types 2 and 5, and whatever a spawner left untagged) kept running with their data inside the rewound
-   pool: they drew nothing while another model was in, and drew again, as stuck ki / special-attack particles over the map,
-   when the same pool contents came back with the base form. Here every task of the layer's pool outside `skip` (the layer's
-   own task, killed by the caller) is marked dead. Returns how many. */
+/* A fighter's effect layer is torn down when its model is replaced and its pool (slot 4/5 shots, 7/8 effects) is rewound.
+   Tasks of that fighter that BtlScene_Reset did not reach (groups 2 and 5 are never owner-tagged) kept running with their
+   data inside the rewound pool: stuck ki / special-attack particles over the map, and texture entries with overwritten
+   pointers. Every task of the pool outside `skip` (the layer's own task, killed by the caller) is removed here. */
 s32 BtlTaskList_KillInPool(s32 slot, void *skipArg) {
-    BtlTask *skip = skipArg;
     sSweepKilled = 0;
     if (gBtlTaskRoot != NULL) {
-        BtlTaskList_SweepPool(gBtlTaskRoot, slot, skip);
+        BtlTaskList_SweepPool(gBtlTaskRoot, slot, skipArg);
     }
-    if (sSweepKilled != 0) {
-        Port_DiagNote("effects: tasks of a removed fighter layer killed, pool slot, count", slot, sSweepKilled);
-    }
+    Port_DiagNote("effects: layer torn down, pool slot, orphan tasks killed", slot, sSweepKilled);
     return sSweepKilled;
 }
 #endif
@@ -1826,7 +1853,25 @@ void EftVram_UploadAll(void) {
         if (e->flags & 2) {
             clutBlock = e->clutBlock;
         }
+#ifdef PORT
+        {
+            extern unsigned gDmaBadRefs; /* dma.c */
+            unsigned before = gDmaBadRefs;
+
+            EftVram_Upload(e->tex, imageBlock, clutBlock);
+            if (gDmaBadRefs != before) { /* this entry's pixels / CLUT were named by a REF that cannot exist */
+                static s32 sBadTex;
+
+                if (sBadTex++ < 16) {
+                    Port_DiagNote("effects: bad texture entry, index, flags", (long)i, (long)e->flags);
+                    Port_DiagNote("effects: bad texture entry, pool of tex, pool of image", (long)EftDiag_PoolOf(e->tex), (long)EftDiag_PoolOf(e->tex->image));
+                    Port_DiagNote("effects: bad texture entry, image block, clut block", (long)e->imageBlock, (long)e->clutBlock);
+                }
+            }
+        }
+#else
         EftVram_Upload(e->tex, imageBlock, clutBlock);
+#endif
     }
 }
 

@@ -684,31 +684,6 @@ void ChrCam_RequestCut(ChrCamChr *chr, s32 table, s32 index) {
     BtlChar_SetFlag(chr, 0xDB);
 }
 
-#ifdef PORT
-extern void Port_DiagNote(const char *what, long a, long b); /* bring-up (iOS): bt3_log.txt */
-
-/* A cut's distance is `def->dist * scale`, scale being the fighter's body height (model header). A transformation
-   rebuilds the model (BtlObjMdl_Destroy clears the object, BtlObjMdl_Create fills it again), and a cut that starts in
-   between reads a height that is 0 or nonsense: the distance is then 0 and the camera sits on the fighter. The last
-   good height of each object is kept and used instead, for that cut only; every other cut, and the fight's own
-   camera (ChrCam_GetOffset, which has its own floor), are untouched. */
-static f32 sLastGoodScale[4];
-static f32 ChrCam_SaneScale(s32 objId, f32 scale) {
-    s32 slot = objId & 3;
-    static s32 sNotes;
-
-    if (scale >= 1.0f && scale < 1000.0f) { /* a real height (fighters are 10..60 units) */
-        sLastGoodScale[slot] = scale;
-        return scale;
-    }
-    if (sNotes < 40) {
-        sNotes++;
-        Port_DiagNote("camera start: bad body height x1000, object", (long)(scale * 1000.0f), (long)objId);
-    }
-    return sLastGoodScale[slot] >= 1.0f ? sLastGoodScale[slot] : 15.0f;
-}
-#endif
-
 /* Starts the cut asked for with ChrCam_RequestCut from its table entry. */
 void ChrCam_StartCut(ChrCamChr *chr) {
     Vec4 vecA;
@@ -875,9 +850,6 @@ void ChrCam_StartCut(ChrCamChr *chr) {
             Vec4_Sub(&vecCDelta, &own2, &vecC);
         }
     }
-#ifdef PORT
-    scale = ChrCam_SaneScale((flags & CHRCUTDEF_OPP) ? BtlOpp_GetObjId(chr) : chr->objId, scale);
-#endif
     if (flags & CHRCUTDEF_MIN_SCALE) {
         scale = BtlUtil_MaxF(scale, 15.0f);
     }
@@ -888,24 +860,6 @@ void ChrCam_StartCut(ChrCamChr *chr) {
     valBDelta = def->pitchDelta * pi / 180.0f;
     valC = def->dist * scale;
     valCDelta = def->distDelta * scale;
-#ifdef PORT
-    /* The cut that closes a transformation (character table, cut 6: the new model has just appeared) frames the head from
-       0.4 body heights (log of 2026-10-15 06:35: distance 8661 for a height of 21653), which fills the 19.5:9 screen of the iPhone with
-       the face. Only that cut is kept at least one body height away, both at its start and at its end; the fight camera
-       and every other cut are not touched. */
-    if (chr->cut.unk0 == 0 && chr->cut.unk4 == 6) {
-        f32 minDist = scale * 1.0f;
-        f32 endDist = valC + valCDelta;
-
-        if (valC < minDist) {
-            valC = minDist;
-        }
-        if (endDist < minDist) {
-            endDist = minDist;
-        }
-        valCDelta = endDist - valC;
-    }
-#endif
     time = def->seconds * 30.0f;
     if (time <= 0) {
         time = 1;

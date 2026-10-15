@@ -32,6 +32,7 @@ static void Dma_NoteFull(const char *what, u32 size) {
    cannot exist (an entry whose pointer / size were overwritten: log of 2026-10-15 06:35, frame 6548 on, REF qwc 21123 at 0x16141d39 right after
    a character change) the packet in front of it is taken back too: left alone, the GS would start an image transfer and read
    the next words of the list as pixels. */
+unsigned gDmaBadRefs;       /* REF tags dropped so far (read by EftVram_UploadAll to name the entry) */
 static u32 *sDmaLastData;   /* where the last Dma_AddData packet starts */
 static s32 sDmaLastDataSize;
 #ifdef __APPLE__
@@ -96,6 +97,8 @@ void Dma_AddRef(void *addr, s32 size) {
     if (!Dma_RefValid(addr, size)) {
         static unsigned sBadRef;
         int tookBack = 0;
+
+        gDmaBadRefs++;
 
         if (sDmaLastData != NULL && sDmaLastDataSize > 0 && sDmaLastDataSize <= 0x60 &&
             (u32 *)((u8 *)sDmaLastData + sDmaLastDataSize) == gDmaCur) {

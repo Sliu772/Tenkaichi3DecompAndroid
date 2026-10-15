@@ -344,6 +344,13 @@ void Port_DiagNote(const char *what, long a, long b) {
         }
         return;
     }
+    if (what[0] == 'e' && what[1] == 'f' && what[2] == 'f') { /* effects: their own budget (the general one is used up by the loads) */
+        static int sEffLines;
+        if (sEffLines++ < 150) {
+            fprintf(stderr, "bt3 diag: %s %ld %ld\n", what, a, b);
+        }
+        return;
+    }
     if (what[0] == 'c' && what[1] == 'a' && what[2] == 'm') {
         if (sCamLines++ < 200) {
             fprintf(stderr, "bt3 diag: %s %ld %ld\n", what, a, b);
