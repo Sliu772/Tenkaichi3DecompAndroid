@@ -3,6 +3,7 @@
 
 #ifdef PORT
 extern void Port_DiagNote(const char *what, long a, long b); /* bring-up (iOS): bt3_log.txt */
+extern f32 BtlCharApi_GetRadius(s32 objId);
 #endif
 
 /* The fighter camera's cut evaluator, 0x1C4F68-0x1C5840: the middle of btl_char_cam.c, still a file of its own (see the
@@ -184,6 +185,44 @@ void ChrCam_CalcCut(ChrCamChr *chr, Vec4 *eye, Vec4 *rot, Vec4 *target) {
     dir.z = Mathf_Cos(pitch) * Mathf_Cos(yaw);
     Vec4_Scale(&dir, &dir, dist);
     Vec4_Sub(eye, eye, &dir);
+#ifdef PORT
+    {
+        /* Cut cameras only (the fight camera is ChrCam_CalcFree / CalcLockOn and is not touched): the eye is the node A
+           position pulled back by `dist` along the cut's angles, and while the model is rebuilt or the node is on the far
+           side of the body that point can fall inside the fighter's own body (the camera is then seen going through it).
+           It is moved out, horizontally, to the body's radius plus a tenth of its height; the target is not changed, so
+           the cut keeps looking where it looked. */
+        f32 radius = BtlCharApi_GetRadius(chr->objId);
+        f32 height = BtlCharApi_GetHeight(chr->objId);
+        f32 minR = radius + height * 0.1f;
+        f32 dx = eye->x - chr->body.pos.x;
+        f32 dz = eye->z - chr->body.pos.z;
+        f32 d = __builtin_sqrtf(dx * dx + dz * dz);
+        f32 mid = chr->body.pos.y - height * 0.5f; /* y is up-negative */
+        static s32 sPushed;
+        static s32 sTrace;
+
+        if (height >= 1.0f && height < 1000.0f && dist > 0.5f && __builtin_fabsf(eye->y - mid) < height * 0.6f) {
+            if (sTrace < 60 && chr->cut.unk0 == 0 && chr->cut.unk4 == 6 && (cut->timer % 3) == 0) {
+                sTrace++;
+                Port_DiagNote("camera cut 6: eye to body (horizontal) x1000, limit x1000", (s32)(d * 1000.0f), (s32)(minR * 1000.0f));
+            }
+            if (d < minR) {
+                if (d < 0.01f) {
+                    dx = -Mathf_Sin(yaw);
+                    dz = -Mathf_Cos(yaw);
+                    d = 1.0f;
+                }
+                eye->x = chr->body.pos.x + dx / d * minR;
+                eye->z = chr->body.pos.z + dz / d * minR;
+                if (sPushed < 40) {
+                    sPushed++;
+                    Port_DiagNote("camera clearance: eye was inside the body, distance x1000, limit x1000", (s32)(d * 1000.0f), (s32)(minR * 1000.0f));
+                }
+            }
+        }
+    }
+#endif
     Vec4_SetZero(rot);
     Vec4_Sub(&dir, &look, eye);
     len = Vec3_Length(&dir);

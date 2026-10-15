@@ -479,7 +479,11 @@ void BtlStage_UpdateObjs(void) {
             for (j = 0; j < objs[i].pieceCount; j++) {
                 part = objs[i].pieces[j];
                 node = part->node;
+#ifdef PORT
+                if (node != NULL && StgNode_IsRigid(node)) { /* a piece without a node (the loop below skips it too): the PS2 read low memory here, the port faults */
+#else
                 if (StgNode_IsRigid(node)) {
+#endif
                     if (node->body >= 0) {
                         StgRigid_Release(node->body);
                     }

@@ -493,8 +493,18 @@ void EftBill_Init(EftZTask *task, EftBillArg *arg) {
 }
 
 /* Item term: clears the flags. */
+#ifdef PORT
+extern void Port_DiagNote(const char *what, long a, long b);
+static s32 sBillsAlive;
+#endif
 void EftBill_Term(EftZTask *task) {
     EftBill *w = task->work;
+
+#ifdef PORT
+    if (sBillsAlive > 0) {
+        sBillsAlive--;
+    }
+#endif
 
     w->flags = 0;
 }
@@ -722,6 +732,13 @@ void EftBillMgr_Reset(EftZTask *task) {
 /* Creates a sprite from the argument block. */
 EftZTask *EftBill_Create(EftBillArg *arg) {
     EftBillArg a = *arg;
+
+#ifdef PORT
+    sBillsAlive++;
+    if ((sBillsAlive % 8) == 0) { /* effects: sprites created and not yet ended; a count that only grows is sprites nothing stops */
+        Port_DiagNote("effects: sprites alive, owner object", sBillsAlive, a.chr);
+    }
+#endif
 
     return BtlTaskList_AddTail(gEftBillList, D_002C40F0, &a);
 }
