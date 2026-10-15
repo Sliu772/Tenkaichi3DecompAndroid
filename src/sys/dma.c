@@ -28,6 +28,33 @@ static int Dma_Fits(u32 size) {
 static void Dma_NoteFull(const char *what, u32 size) {
     Port_DiagNote(what, (long)((u32)gDmaCur - gDmaBuf[gDmaBufIdx]), (long)size);
 }
+/* An upload is a BITBLT packet (Dma_AddData, 0x30 bytes) followed by a REF tag with its pixels. When the REF names data that
+   cannot exist (an entry whose pointer / size were overwritten: log of 2026-10-15 06:35, frame 6548 on, REF qwc 21123 at 0x16141d39 right after
+   a character change) the packet in front of it is taken back too: left alone, the GS would start an image transfer and read
+   the next words of the list as pixels. */
+static u32 *sDmaLastData;   /* where the last Dma_AddData packet starts */
+static s32 sDmaLastDataSize;
+#ifdef __APPLE__
+extern unsigned Port_GameMemEnd(void); /* plat_mem.c */
+#endif
+static int Dma_RefValid(void *addr, s32 size) {
+    u32 a = DMA_TAG_ADDR(addr);
+    if (size < 0 || size / 16 > 0xFFFF || (size != 0 && a == 0)) {
+        return 0;
+    }
+#ifdef __APPLE__
+    {
+        unsigned long long end = Port_GameMemEnd();
+        if (end == 0) {
+            end = 0x20000000ull;
+        }
+        if ((unsigned long long)a + (unsigned long long)size > end) {
+            return 0;
+        }
+    }
+#endif
+    return 1;
+}
 #endif
 
 /* Allocates the two 1 MB display-list buffers and points the write cursor at the first. */
@@ -49,6 +76,10 @@ void Dma_AddData(void *src, s32 size) {
         return;
     }
 #endif
+#ifdef PORT
+    sDmaLastData = gDmaCur;
+    sDmaLastDataSize = size / 16 * 16;
+#endif
     memcpy(gDmaCur, src, size);
     gDmaCur = (u32 *)((u8 *)gDmaCur + size / 16 * 16);
 }
@@ -62,6 +93,24 @@ void Dma_AddRef(void *addr, s32 size) {
         Dma_NoteFull("dma: list full in AddRef, used/size", 16);
         return;
     }
+    if (!Dma_RefValid(addr, size)) {
+        static unsigned sBadRef;
+        int tookBack = 0;
+
+        if (sDmaLastData != NULL && sDmaLastDataSize > 0 && sDmaLastDataSize <= 0x60 &&
+            (u32 *)((u8 *)sDmaLastData + sDmaLastDataSize) == gDmaCur) {
+            gDmaCur = sDmaLastData; /* the BITBLT packet that announced this upload */
+            tookBack = 1;
+        }
+        sDmaLastData = NULL;
+        if (sBadRef++ < 24) { /* the caller's offset from Dma_AddRef is fixed for a build: find it in the link map */
+            Port_DiagNote("dma: bad REF dropped, size, caller-AddRef offset", (long)size,
+                          (long)((u8 *)__builtin_return_address(0) - (u8 *)&Dma_AddRef));
+            Port_DiagNote("dma: bad REF dropped, address, packet taken back", (long)DMA_TAG_ADDR(addr), (long)tookBack);
+        }
+        return;
+    }
+    sDmaLastData = NULL;
 #endif
 
     tag[0] = DMA_TAG_REF + size / 16;

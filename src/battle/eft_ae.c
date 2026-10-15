@@ -1609,6 +1609,50 @@ void BtlTask_SetPos(BtlTask *task, EftAeVec pos) {
     Vec4_Copy(&task->pos, (Vec4 *)&pos);
 }
 
+#ifdef PORT
+extern int BtlPool_Contains(s32 slot, const void *p); /* btl_pool.c */
+extern void Port_DiagNote(const char *what, long a, long b);
+static s32 sSweepKilled;
+
+static void BtlTaskList_SweepPool(BtlTaskList *list, s32 slot, BtlTask *skip) {
+    BtlTask *task = list->head;
+    BtlTask *next;
+
+    while (task != NULL) {
+        next = task->next;
+        if (task != skip) {
+            if (BtlPool_Contains(slot, task->work) || BtlPool_Contains(slot, task)) {
+                if (!BTL_TASK_BITS(task)->dead) {
+                    BtlTask_SetDead(task); /* removed (term callback included) by the next update pass, while the memory is still intact */
+                    sSweepKilled++;
+                }
+            } else if (task->child != NULL && !BTL_TASK_BITS(task)->dead) {
+                BtlTaskList_SweepPool(task->child, slot, skip);
+            }
+        }
+        task = next;
+    }
+}
+
+/* A fighter's effect layer is torn down when its model is replaced (transformation, fusion, member switch) and its pool
+   (slot 7 / 8) is rewound. Tasks of that fighter that BtlScene_Reset did not reach (the ones never tagged with the owner
+   bits: emitter types 2 and 5, and whatever a spawner left untagged) kept running with their data inside the rewound
+   pool: they drew nothing while another model was in, and drew again, as stuck ki / special-attack particles over the map,
+   when the same pool contents came back with the base form. Here every task of the layer's pool outside `skip` (the layer's
+   own task, killed by the caller) is marked dead. Returns how many. */
+s32 BtlTaskList_KillInPool(s32 slot, void *skipArg) {
+    BtlTask *skip = skipArg;
+    sSweepKilled = 0;
+    if (gBtlTaskRoot != NULL) {
+        BtlTaskList_SweepPool(gBtlTaskRoot, slot, skip);
+    }
+    if (sSweepKilled != 0) {
+        Port_DiagNote("effects: tasks of a removed fighter layer killed, pool slot, count", slot, sSweepKilled);
+    }
+    return sSweepKilled;
+}
+#endif
+
 /* Sets bits of a task's tag word; used to tag a task with its owner (0x800 object id 0, else 0x1000). */
 void BtlTask_SetOwnerTag(BtlTask *task, s32 bits) {
     task->tag |= bits;

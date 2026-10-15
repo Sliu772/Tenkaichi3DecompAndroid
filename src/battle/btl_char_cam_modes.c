@@ -888,6 +888,24 @@ void ChrCam_StartCut(ChrCamChr *chr) {
     valBDelta = def->pitchDelta * pi / 180.0f;
     valC = def->dist * scale;
     valCDelta = def->distDelta * scale;
+#ifdef PORT
+    /* The cut that closes a transformation (character table, cut 6: the new model has just appeared) frames the head from
+       0.4 body heights (log of 2026-10-15 06:35: distance 8661 for a height of 21653), which fills the 19.5:9 screen of the iPhone with
+       the face. Only that cut is kept at least one body height away, both at its start and at its end; the fight camera
+       and every other cut are not touched. */
+    if (chr->cut.unk0 == 0 && chr->cut.unk4 == 6) {
+        f32 minDist = scale * 1.0f;
+        f32 endDist = valC + valCDelta;
+
+        if (valC < minDist) {
+            valC = minDist;
+        }
+        if (endDist < minDist) {
+            endDist = minDist;
+        }
+        valCDelta = endDist - valC;
+    }
+#endif
     time = def->seconds * 30.0f;
     if (time <= 0) {
         time = 1;

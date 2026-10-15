@@ -85,6 +85,19 @@ void *BtlPool_Alloc(s32 slot, s32 size) {
     return ptr;
 }
 
+#ifdef PORT
+/* 1 when `p` lies inside the arena memory of the slot. */
+int BtlPool_Contains(s32 slot, const void *p) {
+    BtlPoolSlot *s;
+
+    if (gBtlPool == NULL || p == NULL || slot < 0 || slot >= BTL_POOL_SLOT_COUNT) {
+        return 0;
+    }
+    s = &gBtlPool->slots[slot];
+    return s->base != NULL && (const u8 *)p >= s->base && (const u8 *)p < s->base + s->size;
+}
+#endif
+
 /* Frees a pointer from a slot; a no-op for arena slots, which are only released by BtlPool_Reset. */
 void BtlPool_Free(s32 slot, void *ptr) {
     if (!(gBtlPool->arenaMask & BTL_POOL_ARENA_BIT(slot))) {
