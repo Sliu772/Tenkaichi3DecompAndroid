@@ -1155,6 +1155,8 @@ void EftKiBlast_Init(EftRTask *task, EftRArg *arg) {
 
     BtlCharApi_GetNodePos(arg->objId, spawnNode, &w->pose.start);
     BtlCharApi_GetNodePos(arg->objId, spawnNode, &w->pose.pos);
+w->pose.pos.y -= 1.5f;   // Puedes probar con valores entre 1.0f y 2.5f según prefieras
+    w->pose.start.y -= 1.5f;
     BtlCharApi_GetNodePos(arg->objId, 0x11, &w->pose.prev);
     Vec4_Copy(&w->pose.dir, &arg->dir);
     w->radius = arg->radius;
