@@ -46,6 +46,11 @@ f32 ChrCam_GetOffset(ChrCamChr *chr, Vec4 *out, s32 mode) {
             pitch = scale * -0.001f + -0.05f;
             break;
     }
+#ifdef PORT
+    /* fix70: the follow camera sat too close to the fighter on the iPhone screen; every preset is pulled back by the same factor */
+    out->y *= 1.25f;
+    out->z *= 1.25f;
+#endif
     out->w = 1.0f;
     return pitch;
 }
