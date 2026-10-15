@@ -61,6 +61,9 @@ extern void Vec3_Normalize(Vec4 *dst, Vec4 *src);
 extern void Vec3_Cross(Vec4 *dst, Vec4 *a, Vec4 *b);
 extern f32 Vec3_Length(Vec4 *v);
 extern f32 Rand_FloatRange(f32 a, f32 b);
+#ifdef PORT
+extern void Port_DiagNote(const char *what, long a, long b); /* bring-up: bt3_log.txt */
+#endif
 
 /* The stage state (gp 0x2FEBE0); only the flag word. */
 typedef struct EftStageState {
@@ -284,7 +287,20 @@ void EftSteamMgr_Init(void *task) {
     memset(gEftSteam, 0, sizeof(EftSteamShared));
     gEftSteam->list = BtlTask_CreateChildList(task, count + BtlStage_GetFxResA(), sizeof(EftSteamWork));
     EftTexSet_Load8(&gEftSteam->tex, BtlScene_GetPackEntry(stage, 0x12));
+#ifdef PORT
+    return; /* fix75: stage emitters off (orbs scattered over the map) */
+#endif
     base = BtlStage_GetFxResC2();
+#ifdef PORT
+    Port_DiagNote("census stage emitters: markers, extra count", count, BtlStage_GetFxResA());
+    if (base != NULL) {
+        for (i = 0; i < count && i < 12; i++) {
+            Port_DiagNote("census stage emitter: x z x1000", (s32)(base[i].pos[0] * 1000.0f), (s32)(base[i].pos[2] * 1000.0f));
+            Port_DiagNote("census stage emitter: y x1000, size x1000", (s32)(base[i].pos[1] * 1000.0f), (s32)(base[i].size * 1000.0f));
+            Port_DiagNote("census stage emitter: rgba, life", (base[i].color[0] << 24) | (base[i].color[1] << 16) | (base[i].color[2] << 8) | base[i].color[3], base[i].life);
+        }
+    }
+#endif
     if (base != NULL) {
         for (i = 0; i < count; i++) {
             marker = &base[i];
@@ -323,6 +339,29 @@ void EftSteamMgr_Term(void) {
 
 /* Emitter manager update: renews the TEX0 of the texture while any emitter exists. */
 void EftSteamMgr_Update(void) {
+#ifdef PORT
+    {
+        static s32 sFrame;
+        static s32 sLogs;
+
+        if (gEftSteam != NULL && gEftSteam->list != NULL && (++sFrame % 240) == 0 && sLogs < 20) {
+            EftSteamTask *t = *(EftSteamTask **)((u8 *)gEftSteam->list + 4); /* list head */
+            s32 emitters = 0;
+            s32 parts = 0;
+            s32 guard = 0;
+
+            while (t != NULL && guard++ < 512) {
+                if (t->cls != NULL && t->cls->update == (void (*)(void *))EftSteam_Update && t->work != NULL) {
+                    emitters++;
+                    parts += ((EftSteamWork *)t->work)->count;
+                }
+                t = *(EftSteamTask **)((u8 *)t + 0x30); /* next */
+            }
+            sLogs++;
+            Port_DiagNote("census stage emitters: live, particles", emitters, parts);
+        }
+    }
+#endif
     if (((void **)gEftSteam->list)[1] != NULL) {
         gEftSteam->tex.tex0 = EftVram_AddTex(&gEftSteam->tex.tex0, 1, 0);
     }

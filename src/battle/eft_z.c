@@ -535,6 +535,28 @@ void EftBill_Update(EftZTask *task) {
         return;
     }
 #endif
+#ifdef PORT
+    /* fix75: an endless sprite far from both fighters is a stray orb: ended. */
+    if ((w->flags & EFT_BILL_NO_LIFE) && !(w->flags & EFT_BILL_ENDING)) {
+        extern f32 BtlCharApi_GetHeight(s32 objId);
+        Vec4 p0;
+        Vec4 p1;
+        f32 lim = BtlCharApi_GetHeight(0) * 5.0f;
+        f32 d0x, d0z, d1x, d1z;
+
+        if (lim >= 20.0f && lim < 5000.0f) {
+            BtlCharApi_GetPos(0, &p0);
+            BtlCharApi_GetPos(1, &p1);
+            d0x = w->arg.pos.x - p0.x; d0z = w->arg.pos.z - p0.z;
+            d1x = w->arg.pos.x - p1.x; d1z = w->arg.pos.z - p1.z;
+            if (d0x * d0x + d0z * d0z > lim * lim && d1x * d1x + d1z * d1z > lim * lim) {
+                w->flags |= EFT_BILL_DEAD;
+                BtlTask_SetDead(task);
+                return;
+            }
+        }
+    }
+#endif
     if (!BtlScene_IsEffectStopped(w->arg.chr, w->type)) {
         if (w->delay <= 0.0f) {
             key = &w->key;
@@ -738,8 +760,47 @@ void EftBillMgr_Term(EftZTask *task) {
     gEftBillUnused = NULL;
 }
 
-/* Manager update: nothing. */
+/* Manager update: nothing (port: every 240 frames, a census of the live sprites in the log). */
 void EftBillMgr_Update(EftZTask *task) {
+#ifdef PORT
+    static s32 sFrame;
+    static s32 sLogs;
+
+    if (gEftBillList != NULL && (++sFrame % 240) == 0 && sLogs < 40) {
+        EftZTask *t = *(EftZTask **)((u8 *)gEftBillList + 4); /* list head */
+        s32 live = 0;
+        s32 endless = 0;
+        s32 ending = 0;
+        s32 shown = 0;
+        s32 guard = 0;
+
+        while (t != NULL && guard++ < 64) {
+            if (t->cls != NULL && *t->cls == (void *)EftBill_Update && t->work != NULL) {
+                EftBill *w = t->work;
+
+                if (w->flags & EFT_BILL_ALIVE) {
+                    live++;
+                    if (w->flags & EFT_BILL_ENDING) {
+                        ending++;
+                    }
+                    if (w->flags & EFT_BILL_NO_LIFE) {
+                        endless++;
+                        if (shown < 6) {
+                            shown++;
+                            Port_DiagNote("census sprite endless: owner object, effect type", w->arg.chr, w->type);
+                            Port_DiagNote("census sprite endless: x z x1000", (s32)(w->arg.pos.x * 1000.0f), (s32)(w->arg.pos.z * 1000.0f));
+                            Port_DiagNote("census sprite endless: flags, owner slot still ours (1/0)", w->flags, w->ownerSlot != NULL ? (*w->ownerSlot == (void *)t) : -1);
+                        }
+                    }
+                }
+            }
+            t = *(EftZTask **)((u8 *)t + 0x30); /* next */
+        }
+        sLogs++;
+        Port_DiagNote("census sprites: live, endless", live, endless);
+        Port_DiagNote("census sprites: ending, list capacity 40", ending, 40);
+    }
+#endif
 }
 
 /* Manager reset: nothing. */
