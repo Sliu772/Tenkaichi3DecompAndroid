@@ -64,8 +64,67 @@ typedef struct Pipe {
     uint32_t key;
     SDL_GPUGraphicsPipeline *p;
 } Pipe;
-static Pipe sPipes[1024];
-static int sPipeCount;
+/* Growable: the game uses more than 1024 distinct keys in a long session. A fixed table used to make every key
+   past the 1024th fall back to pipeline 0 (other blend, depth and colour mask: wrong colours). The keys are found
+   through an open-addressing hash table (one lookup per draw instead of a scan of every pipeline). */
+static Pipe *sPipes;
+static int sPipeCount, sPipeCap;
+static int *sPipeHash;      /* index into sPipes + 1, 0 = empty */
+static int sPipeHashCap;    /* power of two, always > 2 * sPipeCount */
+static int sPipeFailed;     /* keys that could not be created (logged once each) */
+
+static uint32_t pipe_hash(uint32_t k) {
+    k ^= k >> 16; k *= 0x7feb352du; k ^= k >> 15; k *= 0x846ca68bu; k ^= k >> 16;
+    return k;
+}
+
+static int pipe_find(uint32_t key) {
+    uint32_t h;
+    if (sPipeHashCap == 0) {
+        return -1;
+    }
+    for (h = pipe_hash(key) & (uint32_t)(sPipeHashCap - 1); sPipeHash[h] != 0; h = (h + 1) & (uint32_t)(sPipeHashCap - 1)) {
+        if (sPipes[sPipeHash[h] - 1].key == key) {
+            return sPipeHash[h] - 1;
+        }
+    }
+    return -1;
+}
+
+static void pipe_hash_insert(int idx) {
+    uint32_t h = pipe_hash(sPipes[idx].key) & (uint32_t)(sPipeHashCap - 1);
+    while (sPipeHash[h] != 0) {
+        h = (h + 1) & (uint32_t)(sPipeHashCap - 1);
+    }
+    sPipeHash[h] = idx + 1;
+}
+
+/* Room for one more entry; 0 if memory is out. */
+static int pipe_reserve(void) {
+    if (sPipeCount == sPipeCap) {
+        int ncap = sPipeCap ? sPipeCap * 2 : 2048;
+        Pipe *np = (Pipe *)SDL_realloc(sPipes, (size_t)ncap * sizeof(Pipe));
+        if (np == NULL) {
+            return 0;
+        }
+        sPipes = np;
+        sPipeCap = ncap;
+    }
+    if (sPipeHashCap < 4 * (sPipeCount + 1)) {
+        int ncap = sPipeHashCap ? sPipeHashCap * 2 : 8192, i;
+        int *nh = (int *)SDL_calloc((size_t)ncap, sizeof(int));
+        if (nh == NULL) {
+            return 0;
+        }
+        SDL_free(sPipeHash);
+        sPipeHash = nh;
+        sPipeHashCap = ncap;
+        for (i = 0; i < sPipeCount; i++) {
+            pipe_hash_insert(i);
+        }
+    }
+    return 1;
+}
 
 /* textures created this frame, to upload in the copy pass */
 #define MAX_PENDING 4096
@@ -245,8 +304,9 @@ static int pipeline_create(uint32_t key, int remember) {
     SDL_GPUVertexAttribute at[3];
     uint64_t t0;
 
-    if (sPipeCount == 1024) {
-        return 0;
+    if (!pipe_reserve()) {
+        fprintf(stderr, "bt3: pipeline %08x: out of memory for the pipeline table\n", key);
+        return -1;
     }
     SDL_zero(ci);
     SDL_zero(vb);
@@ -305,9 +365,12 @@ static int pipeline_create(uint32_t key, int remember) {
     sPipes[sPipeCount].p = SDL_CreateGPUGraphicsPipeline(sDev, &ci);
     gGpuPipeNs += gpu_now() - t0;
     if (sPipes[sPipeCount].p == NULL) {
-        fprintf(stderr, "bt3: pipeline %08x: %s\n", key, SDL_GetError());
-        return 0;
+        sPipeFailed++;
+        fprintf(stderr, "bt3: pipeline %08x: %s (draws using it are skipped; %d pipelines made, %d failed)\n", key, SDL_GetError(), sPipeCount, sPipeFailed);
+        return -1;
     }
+    sPipes[sPipeCount].key = key;
+    pipe_hash_insert(sPipeCount);
     if (remember) { /* first seen in this run: known from the next start on */
         FILE *f = fopen(pipeline_file(), "a");
         if (f != NULL) {
@@ -323,16 +386,14 @@ static int pipeline_create(uint32_t key, int remember) {
 static void pipelines_preload(void) {
     FILE *f = fopen(pipeline_file(), "r");
     unsigned key;
-    int i, n = 0;
+    int n = 0;
     uint64_t t0 = gpu_now();
 
     if (f == NULL) {
         return;
     }
     while (fscanf(f, "%x", &key) == 1) {
-        for (i = 0; i < sPipeCount && sPipes[i].key != key; i++) {
-        }
-        if (i == sPipeCount && (key & ~0x7FF7FFFu) == 0) {
+        if ((key & ~0x7FF7FFFu) == 0 && pipe_find(key) < 0) {
             pipeline_create(key, 0);
             n++;
         }
@@ -343,13 +404,8 @@ static void pipelines_preload(void) {
 
 /* The pipeline of a key gs_draw.c derived from GS state: cached here, created on first sight. */
 static int pipe_get(uint32_t key) {
-    int i;
-    for (i = 0; i < sPipeCount; i++) {
-        if (sPipes[i].key == key) {
-            return i;
-        }
-    }
-    return pipeline_create(key, 1);
+    int i = pipe_find(key);
+    return i >= 0 ? i : pipeline_create(key, 1);
 }
 
 /* --- init --------------------------------------------------------------------------------------- */
@@ -883,6 +939,7 @@ static void show_target(SDL_GPUCommandBuffer *cmd, int best, SDL_GPUTexture *swa
 
 /* While the game is paused (the settings window open, plat_stub.c): the last picture again, with the window on it,
    and the window's events. The game itself does not run. */
+extern volatile int gGsBackground, gGsInGpu; /* defined below (iOS background hold) */
 int GsGpu_PauseFrame(void) {
     SDL_GPUCommandBuffer *cmd;
     SDL_GPUTexture *swap = NULL;
@@ -898,6 +955,12 @@ int GsGpu_PauseFrame(void) {
         return 0; /* (not this back end, or nothing shown yet: the game goes on) */
     }
     poll_events();
+#ifdef __APPLE__
+    if (gGsBackground) { /* the app is not in the foreground: nothing is submitted (see background_hold) */
+        SDL_Delay(20);
+        return 1;
+    }
+#endif
     cmd = SDL_AcquireGPUCommandBuffer(sDev);
     if (cmd == NULL) {
         return 0;
@@ -917,7 +980,7 @@ int GsGpu_PauseFrame(void) {
 static uint64_t sHb[6], sHbPass, sHbCopy;
 static unsigned sHbN;
 
-static void vk_frame_end(void) {
+static void vk_frame_end_inner(void) {
     SDL_GPUCommandBuffer *cmd;
     SDL_GPUCopyPass *copy;
     SDL_GPURenderPass *pass = NULL;
@@ -988,7 +1051,7 @@ static void vk_frame_end(void) {
         for (k = gsDrawCount > 14 ? gsDrawCount - 14 : 0; k < gsDrawCount; k++) {
             const GsDraw *d = &gsDraws[k];
             fprintf(stderr, "tail: draw %u native %d target %d vu %d first %u count %u pipeline key %08x mode %d %d %d %d misc %.0f %.0f %.0f %.0f x %.1f..\n",
-                    k, d->native, d->target, d->vu, d->first, d->count, d->native ? 0 : sPipes[d->pipeline].key, d->mode[0], d->mode[1], d->mode[2],
+                    k, d->native, d->target, d->vu, d->first, d->count, d->native || d->pipeline < 0 ? 0 : sPipes[d->pipeline].key, d->mode[0], d->mode[1], d->mode[2],
                     d->mode[3], d->misc[0], d->misc[1], d->misc[2], d->misc[3], d->native || d->vu ? 0.0f : gsVerts[d->first].x);
             if (!d->native && !d->vu && d->count <= 12 && k + 3 >= gsDrawCount) {
                 uint32_t j;
@@ -1124,6 +1187,9 @@ static void vk_frame_end(void) {
         SDL_FColor bc;
         struct { int32_t mode[4]; float misc[4]; float rect[4]; float orig[4]; } fu;
 
+        if (d->pipeline < 0 && (d->native == 0 || d->native == 3)) { /* its pipeline could not be created (logged): skip the draw, never draw it with another pipeline's state */
+            continue;
+        }
         if (d->native >= 100) { /* a picture uploaded into this display buffer (GsGpu_FbUpload): scaled into its texture */
             SDL_GPUBlitInfo bl;
             if (pass != NULL) {
@@ -1601,6 +1667,45 @@ static void vk_frame_end(void) {
     gsAnchor = 0;
     gsSkipped = 0;
     gsNative = 0;
+}
+
+/* iOS: the app leaving the foreground. Work handed to the GPU after that makes the driver report
+   VK_ERROR_DEVICE_LOST (BackgroundExecutionNotPermitted) and the game closes. plat_ios.c's event watch sets
+   gGsBackground on "will enter background" and waits (bounded) for gGsInGpu to drop, so no frame is being
+   submitted when the app is suspended; this holds the game thread here until the app is back. */
+volatile int gGsBackground;
+volatile int gGsInGpu;
+static void background_hold(void) {
+    static int logged;
+    if (!gGsBackground) {
+        return;
+    }
+    if (sDev != NULL) {
+        SDL_WaitForGPUIdle(sDev);
+    }
+    if (!logged++) {
+        fprintf(stderr, "bt3: in the background: no GPU work is submitted until the app is back\n");
+    }
+    while (gGsBackground) {
+        SDL_Delay(20);
+    }
+    fprintf(stderr, "bt3: back in the foreground: the frames go on\n");
+}
+
+static void vk_frame_end(void) {
+#ifdef __APPLE__
+    background_hold();
+    gGsInGpu = 1;
+    if (gGsBackground) { /* (the event arrived between the two lines: let the frame go by unsubmitted, never half of it) */
+        gGsInGpu = 0;
+        background_hold();
+        gGsInGpu = 1;
+    }
+    vk_frame_end_inner();
+    gGsInGpu = 0;
+#else
+    vk_frame_end_inner();
+#endif
 }
 
 /* Target i's picture, reduced to the GS's 512 x 448 (the nearest pixel of each: the cross-fade it is for is a

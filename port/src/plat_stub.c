@@ -27,6 +27,40 @@ int sceSifQueryMaxFreeMemSize() { return 0x100000; }
 /* The bind is answered at once: sceSifClientData.serve (offset 0x24) becomes non-NULL. */
 /* A pointer as the 4-byte address a DMA tag holds (an offset from the header on iOS, the pointer itself elsewhere). */
 uint32_t Port_RefAddr(const void *p) { return Port_P2A(p); }
+/* 1 = `size` bytes at `p` can be named by a DMA REF tag: 16-byte aligned, inside the game's memory (iOS: below the end of
+   the window plat_mem.c reserved; elsewhere only the alignment and size are checked), and a size a texture upload can have.
+   A damaged TexEntry (pixel bytes read as an entry) gave tags like size 0x6a552830 at the odd address 0x16141d39. */
+#ifdef __APPLE__
+extern uint32_t Port_GameMemEnd(void); /* plat_mem.c */
+#endif
+void Port_LogBadTex(int i, int count, const void *obj, const void *model, const void *file, int first, int n,
+                    const void *pix, unsigned pixSize, const void *clut, unsigned clutSize) {
+    static unsigned bad;
+    if (bad++ < 16) {
+        fprintf(stderr, "bt3: texture entry %d of %d (object %08x, model %08x, tex file %08x, first %d count %d) is damaged: "
+                        "pix %08x size %x, clut %08x size %x: its upload is skipped (%u so far)\n",
+                i, count, (unsigned)Port_P2A(obj), (unsigned)Port_P2A(model), (unsigned)Port_P2A(file), first, n,
+                (unsigned)Port_P2A(pix), pixSize, (unsigned)Port_P2A(clut), clutSize, bad);
+    }
+}
+int Port_RefOk(const void *p, int size) {
+    uint32_t a = Port_P2A(p);
+    if (p == (const void *)0 || size <= 0 || size > 0x800000 || (size & 15) != 0 || (a & 15) != 0) {
+        return 0;
+    }
+#ifdef __APPLE__
+    {
+        uint64_t end = Port_GameMemEnd();
+        if (end == 0) {
+            end = 0x20000000ull;
+        }
+        if ((uint64_t)a + (uint64_t)size > end) {
+            return 0;
+        }
+    }
+#endif
+    return 1;
+}
 int sceSifBindRpc(void *client, int id, int mode) { (void)id; (void)mode; *(uint32_t *)((uint8_t *)client + 0x24) = Port_P2A(client); /* a 4-byte pointer field of the game */ return 0; }
 int func_002B4AF0() { return 0; }      /* sceSifCheckStatRpc: never busy */
 /* sceSifCallRpc, sceSifSetDma, sceSdRemote: the sound effects, port/src/gs/snd_se.c */

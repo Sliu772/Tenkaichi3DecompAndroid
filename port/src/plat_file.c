@@ -333,8 +333,16 @@ void Port_DiagBlock(const char *what, const void *p, uint32_t bytes) {
 }
 
 void Port_DiagNote(const char *what, long a, long b) {
-    static int sLines;
+    static int sLines, sCamLines;
 
+    /* the camera cuts have a budget of their own: the bpe notes of the loads used the whole one before the first
+       transformation, and the log had no camera lines to find why a cut sits too close */
+    if (what[0] == 'c' && what[1] == 'a' && what[2] == 'm') {
+        if (sCamLines++ < 200) {
+            fprintf(stderr, "bt3 diag: %s %ld %ld\n", what, a, b);
+        }
+        return;
+    }
     if (sLines++ < 400) {
         fprintf(stderr, "bt3 diag: %s %ld %ld\n", what, a, b);
     }

@@ -573,6 +573,13 @@ int GsDraw_TargetGet(uint32_t fbp, int create) {
                 slot = i;
             }
         }
+        if (slot < 0) { /* none idle for two seconds: the one idle longest, if it has been idle half a second (better than dropping the new buffer's draws) */
+            for (i = 0; i < gsTargetCount; i++) {
+                if (gsTargets[i].last + 30 < gGsFrame && (slot < 0 || gsTargets[i].last < gsTargets[slot].last)) {
+                    slot = i;
+                }
+            }
+        }
         if (slot < 0) {
             return -1;
         }
@@ -701,8 +708,28 @@ static int draw_state(int ctx, int topo, int sprite, int vu, GsDraw *d, float *u
         }
     }
     memset(d, 0, sizeof(*d));
+    {   /* A FRAME register that is not a frame buffer at all (garbage from a damaged display list: a PSM that no frame
+           buffer has, a width past the 1024-pixel page): no draw, and above all no new render target for it. Every
+           such value used to take one of the 24 slots, and the real buffers then lost theirs. */
+        uint64_t fr = gGs.frame[ctx];
+        uint32_t fpsm = (uint32_t)((fr >> 24) & 0x3F), fbw = (uint32_t)((fr >> 16) & 0x3F);
+        static unsigned badFrames;
+        if (!(fpsm == 0 || fpsm == 1 || fpsm == 2 || fpsm == 10 || fpsm == 0x30 || fpsm == 0x31 || fpsm == 0x32 || fpsm == 0x3A) || fbw > 16) {
+            if (badFrames++ < 16) {
+                fprintf(stderr, "bt3: FRAME %016llx is not a frame buffer (fbp %x fbw %u psm %x): draw dropped (%u so far)\n",
+                        (unsigned long long)fr, (unsigned)(fr & 0x1FF), fbw, fpsm, badFrames);
+            }
+            gsSkipped++;
+            return 0;
+        }
+    }
     d->target = GsDraw_TargetGet((uint32_t)(gGs.frame[ctx] & 0x1FF), 1);
     if (d->target < 0) {
+        static unsigned noSlot;
+        if (noSlot++ < 16) {
+            fprintf(stderr, "bt3: no render target slot for fbp %x (all %d in use this second): draw dropped (%u so far)\n",
+                    (unsigned)(gGs.frame[ctx] & 0x1FF), MAX_TARGETS, noSlot);
+        }
         return 0;
     }
     d->tex = gsWhite;
@@ -1625,6 +1652,11 @@ int GsGpu_Init(void) {
  * of n - 1 at the same place in the list if it is the same kind of draw (signature below); a pair whose model
  * would jump far on screen (a camera cut, a teleport) is not blended, and when most are like that no in-between
  * picture is shown at all. */
+#ifdef __APPLE__
+#define GS_INTERP_DEFAULT 1 /* iOS: 60 pictures a second by default (a saved "interp" setting or BT3_INTERP still wins; F1 menu turns it off) */
+#else
+#define GS_INTERP_DEFAULT 0
+#endif
 int gsInterp = -1;
 static uint32_t sInterpBlkView[MAX_VU_UNIFORMS], sInterpPrevBlkView[MAX_VU_UNIFORMS]; /* the view each block is drawn in (a number made of its draws' scissor rectangle) */
 static float sInterpPrevRep[MAX_VU_UNIFORMS][3];
@@ -3524,7 +3556,7 @@ void GsGpu_FrameEnd(void) {
             }
         }
         if (gsInterp < 0) {
-            gsInterp = getenv("BT3_INTERP") != NULL ? atoi(getenv("BT3_INTERP")) : Port_Setting("interp", 0);
+            gsInterp = getenv("BT3_INTERP") != NULL ? atoi(getenv("BT3_INTERP")) : Port_Setting("interp", GS_INTERP_DEFAULT);
             gsInterp = gsInterp < 0 ? 0 : gsInterp > 3 ? 3 : gsInterp;
             sInterpPrev = malloc(MAX_VU_UNIFORMS * sizeof(Vu0Uniform));
             sInterpBlend = malloc(MAX_VU_UNIFORMS * sizeof(Vu0Uniform));

@@ -257,6 +257,25 @@ void ObjDraw_MakeFacingMtx(Mtx44 *m, Vec4 *dir) {
     m->m[2][2] = dir->z;
 }
 
+#ifdef PORT
+extern int Port_RefOk(const void *p, int size); /* port/src/plat_stub.c */
+extern void Port_LogBadTex(int i, int count, const void *obj, const void *model, const void *file, int first, int n,
+                           const void *pix, unsigned pixSize, const void *clut, unsigned clutSize);
+/* 1 = both blocks of the entry can go into a REF tag. A damaged entry is logged (the first 16) and left out whole:
+   its BITBLT packet and its data are one unit, and a packet without its data would make the GS read the next
+   words as pixels. */
+static int ObjDraw_EntryOk(ObjDrawObj *obj, s32 i, TexEntry *e) {
+    if (Port_RefOk(e->pix, e->pixSize) && Port_RefOk(e->clut, e->clutSize)) {
+        return 1;
+    }
+    Port_LogBadTex((int)i, (int)obj->mdl.tex->count, obj, obj->mdl.model, obj->mdl.tex, (int)obj->mdl.model->texFirst,
+                   (int)obj->mdl.model->texCount, e->pix, (unsigned)e->pixSize, e->clut, (unsigned)e->clutSize);
+    return 0;
+}
+#else
+#define ObjDraw_EntryOk(obj, i, e) 1
+#endif
+
 /* Queues the model's per-frame texture uploads: its own textures one by one (the face texture replaced by the
    current expression), then the CLUT range that matches the object's colour flag. */
 void ObjDraw_UploadTextures(ObjDrawObj *obj) {
@@ -278,11 +297,20 @@ void ObjDraw_UploadTextures(ObjDrawObj *obj) {
 
     i = 0;
     file = obj->mdl.tex;
+#ifdef PORT
+    if (file == NULL || file->count > 0x100 || file->ent == NULL) { /* a stale or damaged texture file pointer: nothing sane to upload */
+        Port_LogBadTex(-1, file != NULL ? (int)file->count : -1, obj, obj->mdl.model, file, 0, 0, NULL, 0, NULL, 0);
+        return;
+    }
+#endif
     first = obj->mdl.model->texFirst;
     count = obj->mdl.model->texCount;
     for (; i < file->count; i++) {
         e = &file->ent[i];
         if (i >= first && i < first + count && i != obj->mdl.model->faceTex) {
+            if (!ObjDraw_EntryOk(obj, i, e)) {
+                continue;
+            }
             tbp = e->tbpOfs + mdl->model->tbp;
             cbp = e->cbpOfs + mdl->model->cbp;
             pkt[8] = 0;
@@ -299,6 +327,9 @@ void ObjDraw_UploadTextures(ObjDrawObj *obj) {
             cbp = e->cbpOfs + mdl->model->cbp;
             if (face != NULL) {
                 e = face;
+                if (!ObjDraw_EntryOk(obj, i, e)) {
+                    continue;
+                }
                 pkt[8] = 0;
                 pkt[9] = (((u64)tbp << 32) | ((u64)e->pixBlt << 48)) >> 32;
                 Dma_AddData(pkt, 0x30);
@@ -308,6 +339,9 @@ void ObjDraw_UploadTextures(ObjDrawObj *obj) {
                 Dma_AddData(pkt, 0x30);
                 Dma_AddRef(e->clut, e->clutSize);
             } else {
+                if (!ObjDraw_EntryOk(obj, i, e)) {
+                    continue;
+                }
                 pkt[8] = 0;
                 pkt[9] = (((u64)tbp << 32) | ((u64)e->pixBlt << 48)) >> 32;
                 Dma_AddData(pkt, 0x30);

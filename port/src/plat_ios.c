@@ -275,6 +275,8 @@ static void on_other_signal(int sig, siginfo_t *si, void *ctx) {
 
 extern volatile int gGsTrimTextures; /* gs_draw.c: drop the textures not used this frame (low-memory warning) */
 
+extern volatile int gGsBackground, gGsInGpu; /* gs_gpu.c: the iOS background hold */
+
 static bool life_watch(void *userdata, void *event) {
     static int lines;
     uint32_t type = *(uint32_t *)event;
@@ -282,6 +284,18 @@ static bool life_watch(void *userdata, void *event) {
     int n;
 
     (void)userdata;
+    if (type == 0x103 || type == 0x104) { /* will / did enter background: no GPU work from here on (VK_ERROR_DEVICE_LOST otherwise) */
+        gGsBackground = 1;
+        if (type == 0x103) { /* this runs on the main thread, inside the system's callback: give a frame being submitted time to finish */
+            int i;
+            for (i = 0; i < 300 && gGsInGpu; i++) {
+                usleep(1000);
+            }
+        }
+    }
+    if (type == 0x105 || type == 0x106) { /* will / did enter foreground */
+        gGsBackground = 0;
+    }
     if (type == 0x102) { /* SDL_EVENT_LOW_MEMORY: iOS is about to kill the app (jetsam) unless it lets go of memory */
         gGsTrimTextures = 1;
     }

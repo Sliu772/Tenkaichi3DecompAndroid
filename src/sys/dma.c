@@ -30,6 +30,11 @@ void Dma_InitBuffers(void) {
 
 /* Copies `size` bytes (whole quadwords) of ready-made packet data to the display list. */
 void Dma_AddData(void *src, s32 size) {
+#ifdef PORT
+    if ((u32)gDmaCur + (u32)size > gDmaBufEnd[gDmaBufIdx]) { /* the list is full: the rest of the frame is left out, never written past the buffer */
+        return;
+    }
+#endif
     memcpy(gDmaCur, src, size);
     gDmaCur = (u32 *)((u8 *)gDmaCur + size / 16 * 16);
 }
@@ -37,6 +42,12 @@ void Dma_AddData(void *src, s32 size) {
 /* Appends a REF tag: sends `size` bytes that live at `addr` without copying them. */
 void Dma_AddRef(void *addr, s32 size) {
     u32 *tag = gDmaCur;
+
+#ifdef PORT
+    if ((u32)tag + 16 > gDmaBufEnd[gDmaBufIdx]) {
+        return;
+    }
+#endif
 
     tag[0] = DMA_TAG_REF + size / 16;
     tag[1] = DMA_TAG_ADDR(addr);
