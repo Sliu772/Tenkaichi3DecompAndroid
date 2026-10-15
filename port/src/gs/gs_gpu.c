@@ -944,6 +944,11 @@ static void vk_frame_end(void) {
         uint64_t nowNs = SDL_GetTicksNS();
         fprintf(stderr, "bt3: alive: frame %u, game blank %u, %u draws, %u vertices, %d targets, %d textures\n", gGsFrame, gPortVBlanks,
                 gsDrawCount, gsVertCount + gsVuVertCount, gsTargetCount, gsTexCount);
+        { /* fix63 (diagnostic): the GPU side's share of the memory */
+            extern uint64_t GsDraw_TexBytes(void);
+            fprintf(stderr, "bt3 mem: frame %u: texture cache %llu MB (%d textures), %d pipelines, %d targets of %dx%d\n", gGsFrame,
+                    (unsigned long long)(GsDraw_TexBytes() >> 20), gsTexCount, sPipeCount, gsTargetCount, (int)(sTW * SCALE), (int)(sTH * SCALE));
+        }
         /* how fast the game runs (60 game blanks a second is full speed) and where a frame's end spends its time, over
            the last 300 frames: the numbers a report about slowness needs, without BT3_GS_VERBOSE */
         if (lastNs != 0 && nowNs > lastNs && sHbN > 0) {

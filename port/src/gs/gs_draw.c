@@ -157,6 +157,7 @@ typedef struct Tex {
     uint32_t bytes;          /* its size in GPU memory (about: the levels' pixels) */
 } Tex;
 static uint64_t sTexBytes; /* the cache's textures' sizes, together */
+uint64_t GsDraw_TexBytes(void) { return sTexBytes; } /* fix63: for the heartbeat line */
 static Tex sTex[MAX_TEX];
 static uint16_t sTexBucket[TEX_BUCKETS]; /* index + 1 of a cache entry, 0 = empty (open addressing) */
 static Tex *sLast; /* the entry the previous lookup returned */

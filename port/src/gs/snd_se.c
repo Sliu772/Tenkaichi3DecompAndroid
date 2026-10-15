@@ -236,10 +236,12 @@ static int stream_ready(void) {
         if (dev == 0) {
             if (GsGpu_Enabled() || gGsFrame > 2) {
                 sTried = 1; /* decided: no device */
+                fprintf(stderr, "bt3 se: no audio device, sound effects are off (frame %u)\n", gGsFrame);
             }
             return 0;
         }
         sTried = 1;
+        fprintf(stderr, "bt3 se: audio device %u found, opening the sound-effects stream\n", (unsigned)dev);
         spec.format = SDL_AUDIO_S16;
         spec.channels = 2;
         spec.freq = OUT_RATE;
@@ -248,6 +250,7 @@ static int stream_ready(void) {
             SDL_SetAudioStreamGetCallback(sStream, mix, NULL);
             SDL_BindAudioStream(dev, sStream);
         }
+        fprintf(stderr, "bt3 se: stream %s%s\n", sStream != NULL ? "created" : "FAILED: ", sStream != NULL ? "" : SDL_GetError());
     }
     return sStream != NULL;
 }
@@ -273,7 +276,18 @@ static void play(int mask, int id, int volume, int pan, int pitch, int handle) {
     Voice *v;
 
     if (slot < 0 || !sBanks[slot].set || !lookup(&sBanks[slot], id, &start, &rate)) {
+        static int sRej;
+        if (sRej++ < 40) { /* fix63 (diagnostic): why a requested effect is not played */
+            fprintf(stderr, "bt3 se: play REJECTED: mask %02x effect %d volume %d: %s\n", mask & 0xFF, id, volume,
+                    slot < 0 ? "no bank in the mask" : !sBanks[slot].set ? "that bank is not set" : "the effect is not in the bank's tables");
+        }
         return;
+    }
+    {
+        static int sOk;
+        if (sOk++ < 30) {
+            fprintf(stderr, "bt3 se: play accepted: bank %d effect %d volume %d (%d so far)\n", slot, id, volume, sOk);
+        }
     }
     for (k = 0; k < VOICES; k++) {
         if (!sVoices[k].on) {
@@ -482,6 +496,18 @@ int sceSifCallRpc(void *client, int fno, int mode, void *send, int sendSize, voi
     if (recv != NULL && recvSize >= 4) {
         memset(recv, 0, 4); /* the result word */
     }
+    {
+        static int sSeen[16], sQueueNoStream, sQueueTotal;
+        if (fno >= 0 && fno < 16 && sSeen[fno]++ < 3) {
+            fprintf(stderr, "bt3 se: command %d received (%d so far), stream ready %d\n", fno, sSeen[fno], ready);
+        }
+        if (fno == 0xD && ++sQueueTotal % 600 == 0) {
+            fprintf(stderr, "bt3 se: %d queues received so far, %d of them with no stream\n", sQueueTotal, sQueueNoStream);
+        }
+        if (fno == 0xD && !ready && sQueueNoStream++ < 5) {
+            fprintf(stderr, "bt3 se: a queue of %u commands arrived with NO stream: they are dropped\n", le32((const uint8_t *)send));
+        }
+    }
     if (sStream != NULL) { SDL_LockAudioStream(sStream); }
     switch (fno) {
     case 0x0: /* INIT */
@@ -491,6 +517,7 @@ int sceSifCallRpc(void *client, int fno, int mode, void *send, int sendSize, voi
     case 0x3: { /* SET_BANK: mask, where the samples are, the header table, the sequence table */
         int slot = slot_of(w[0]);
         if (slot >= 0) {
+            { static int sSet; if (sSet++ < 12) { fprintf(stderr, "bt3 se: SET_BANK slot %d: spu %08x hd %08x sq %08x\n", slot, (unsigned)w[1], (unsigned)w[2], (unsigned)w[3]); } }
             sBanks[slot].set = 1;
             sBanks[slot].spu = (uint32_t)w[1];
             sBanks[slot].hd = (const uint8_t *)Port_A2P((uint32_t)w[2]);

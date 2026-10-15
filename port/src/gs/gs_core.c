@@ -1423,6 +1423,25 @@ void Port_GsVif1Chain(uint32_t tadr, int tte) {
     }
 }
 
+
+/* fix62/fix64 (iOS, logs 94): the game died in vif() reading a DMA block at 0x1804a68da, and frame 6367 drew from a GIF run at
+   0x121126bd: tags of the chain named garbage addresses (the same garbage as the impossible TEX0 / "names address 0" cases).
+   Game memory on iOS is the window from the image header, which ends at Port_GameMemEnd() (0x12000000 in those logs; fix62
+   allowed 512 MB, which let 0x121126bd through). A block that ends past it is not read. Off iOS the check is not made. */
+#ifdef __APPLE__
+extern uint32_t Port_GameMemEnd(void); /* plat_mem.c */
+static int Gs_ChainAddrOk(uint32_t addr, uint32_t qwc) {
+    uint64_t end = Port_GameMemEnd();
+
+    if (end == 0) {
+        end = 0x20000000ull; /* no window yet */
+    }
+    return (uint64_t)addr + (uint64_t)qwc * 16ull <= end;
+}
+#else
+static int Gs_ChainAddrOk(uint32_t addr, uint32_t qwc) { (void)addr; (void)qwc; return 1; }
+#endif
+
 /* Executes one frame's list: the DMA chain at `tadr` on VIF1, then the end-of-frame work of the back end. */
 static void run_chain(uint32_t tadr, int tte) {
     uint32_t stack[2], sp = 0;
@@ -1430,7 +1449,7 @@ static void run_chain(uint32_t tadr, int tte) {
     int fresh = 0; /* 1 for the tag a CALL has just jumped to */
 
     for (guard = 0; guard < 100000; guard++) {
-        const uint32_t *tag = (const uint32_t *)Port_A2P(tadr);
+        const uint32_t *tag = Gs_ChainAddrOk(tadr, 1) ? (const uint32_t *)Port_A2P(tadr) : NULL;
         uint32_t qwc, id, addr; /* addr: a host pointer, all 32 bits */
         if (tag == NULL) { /* a call or a next that points at address 0: nothing to walk */
             static unsigned sNullTag;
@@ -1453,6 +1472,14 @@ static void run_chain(uint32_t tadr, int tte) {
         case 5: data = tag + 4; if (sp < 2) { stack[sp++] = tadr + 16 + qwc * 16; } tadr = addr; fresh = 1; break; /* CALL */
         case 6: data = tag + 4; if (sp > 0) { tadr = stack[--sp]; } else { end = 1; } break;          /* RET */
         default: data = tag + 4; end = 1; break;                                          /* END */
+        }
+        if (data != NULL && qwc != 0 && (id == 0 || id == 3 || id == 4) && !Gs_ChainAddrOk(addr, qwc)) { /* fix62: a block outside the game's memory */
+            static unsigned sFarData;
+            if (sFarData++ < 16) {
+                fprintf(stderr, "bt3 gs: frame %u: DMA tag at %08x (id %u, qwc %u) names address %08x, outside the game's memory: skipped\n",
+                        sFrame, (unsigned)Port_P2A(tag), id, qwc, addr);
+            }
+            data = NULL;
         }
         if (data == NULL && qwc != 0) { /* a REF / REFS / REFE tag whose address is 0: the data it names was never set up. Reading it crashed the game (vif, fighters' chains). Skipped, and the tag is logged. */
             static unsigned sNullData;

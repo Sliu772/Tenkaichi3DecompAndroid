@@ -140,6 +140,36 @@ typedef void *FontStrRef;
 static FontStrRef sFontStr[FONT_STR_SLOTS];
 static FontStrRef sFontPendingStr;
 static s32 sFontDiagDrawn, sFontDiagMissed; /* glyph sprites drawn / characters with no glyph since the last flush */
+
+/* fix61 (iOS, log 94): fix60 kept the string right but the string already ARRIVES wrong. Font_PrintAt received
+   hdr + low32(real address) = real + the ASLR slide (queued 05ded720, flushed 08691720: the difference is the slide of
+   that run, 0x28A4000), so storing it as an offset could not help. A good pointer to a string never starts with a 0
+   character here; if the pointer given reads 0 and the same pointer minus the slide (inside the game's window) reads
+   something, that one is the real string. Pointers that are already right are returned unchanged. */
+#ifdef __APPLE__
+#include <stdint.h>
+extern char _mh_execute_header[] __attribute__((visibility("hidden")));
+static const void *Font_FixStr(const void *p, s32 kind) {
+    const u8 *b = (const u8 *)p;
+    uintptr_t hdr = (uintptr_t)_mh_execute_header;
+    uintptr_t slide = hdr - 0x100000000ULL;
+    const u8 *alt;
+    u32 first, altFirst;
+
+    if (p == NULL || slide == 0 || (uintptr_t)b < hdr + slide || (uintptr_t)b - slide >= hdr + 0x13000000ULL) {
+        return p;
+    }
+    alt = b - slide;
+    first = (kind == FONT_CMD_STR8) ? *b : *(const u16 *)b;
+    if (first != 0) {
+        return p;
+    }
+    altFirst = (kind == FONT_CMD_STR8) ? *alt : *(const u16 *)alt;
+    return altFirst != 0 ? (const void *)alt : p;
+}
+#else
+#define Font_FixStr(p, kind) (p)
+#endif
 #endif
 
 extern FontCursor gFontCursor; /* 0x31C1C0 */
@@ -440,6 +470,9 @@ s32 Font_GetGlyphHeight(void) {
 
 /* Width in pixels of the widest line of a string at a scale, with the current style. */
 s32 Font_MeasureWidthEx(void *str, s32 kind, f32 scale) {
+#ifdef PORT
+    str = (void *)Font_FixStr(str, kind);
+#endif
     FontStyle *style = &gFontStyle;
     s32 max = 0;
     s32 width = 0;
@@ -497,6 +530,9 @@ f32 Font_FitScale(u16 *str, s32 width) {
 
 /* Number of lines of a string. */
 s32 Font_CountLinesEx(void *str, s32 kind) {
+#ifdef PORT
+    str = (void *)Font_FixStr(str, kind);
+#endif
     s32 lines = 1;
     u16 ch;
 
@@ -552,6 +588,7 @@ FontCmd *Font_AddCmdAt(s32 x, s32 y, s32 arg, s32 digits, s32 kind) {
 /* Prints a 16-bit string at the cursor. */
 void Font_Print(u16 *str) {
 #ifdef PORT
+    str = (void *)Font_FixStr(str, FONT_CMD_STR16);
     FONT_STR_STORE(sFontPendingStr, str);
 #endif
     Font_AddCmd((s32)str, 0, FONT_CMD_STR16);
@@ -560,6 +597,7 @@ void Font_Print(u16 *str) {
 /* Prints a 16-bit string at a position. */
 void Font_PrintAt(s32 x, s32 y, u16 *str) {
 #ifdef PORT
+    str = (void *)Font_FixStr(str, FONT_CMD_STR16);
     FONT_STR_STORE(sFontPendingStr, str);
 #endif
     Font_AddCmdAt(x, y, (s32)str, 0, FONT_CMD_STR16);
@@ -578,6 +616,7 @@ void Font_PutCharAt(s32 x, s32 y, u16 ch) {
 /* Prints an 8-bit string at the cursor. */
 void Font_PrintAscii(char *str) {
 #ifdef PORT
+    str = (void *)Font_FixStr(str, FONT_CMD_STR8);
     FONT_STR_STORE(sFontPendingStr, str);
 #endif
     Font_AddCmd((s32)str, 0, FONT_CMD_STR8);
@@ -586,6 +625,7 @@ void Font_PrintAscii(char *str) {
 /* Prints an 8-bit string at a position. */
 void Font_PrintAsciiAt(s32 x, s32 y, char *str) {
 #ifdef PORT
+    str = (void *)Font_FixStr(str, FONT_CMD_STR8);
     FONT_STR_STORE(sFontPendingStr, str);
 #endif
     Font_AddCmdAt(x, y, (s32)str, 0, FONT_CMD_STR8);

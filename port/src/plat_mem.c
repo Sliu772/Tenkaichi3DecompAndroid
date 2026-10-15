@@ -245,6 +245,12 @@ static uint8_t *ios_window(void) {
     return sIosWin;
 }
 
+/* fix64: where the game's memory ends, as an offset from the header (0 until the window exists). The GS code uses it to refuse
+   DMA blocks outside it (log 94: the garbage of frame 6367 named 0x121126bd, 1 MB past the end 0x12000000). */
+uint32_t Port_GameMemEnd(void) {
+    return sIosWin != NULL ? (uint32_t)((uintptr_t)sIosWin - PORT_BASE) + IOS_WIN_SIZE : 0u;
+}
+
 /* The registers the game addresses at 0x10000000 / 0x12000000 (irfix.py points it here; there is no such address). */
 uint8_t gPortHwRegs[0x10000] __attribute__((aligned(65536)));
 uint8_t gPortGsRegs[0x2000] __attribute__((aligned(65536)));

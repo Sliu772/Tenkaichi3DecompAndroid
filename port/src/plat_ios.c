@@ -415,6 +415,66 @@ static void hb_dec(char *out, unsigned long long v) { /* 8 digits, zero padded *
     }
 }
 
+/* fix63 (diagnostic): what the process memory is made of. Logs 94: the footprint went from 444 MB to 1412 MB in a battle while
+   the texture cache held at most 320 MB and the 24 targets about 226 MB. Walks the task's regions and adds up the dirty and
+   swapped pages by VM user tag (the number says what made the region: 1-9 malloc, 20-23 / 30-ish graphics, 33 IOSurface...),
+   and prints the six biggest. Only when the footprint moved by 128 MB or more, and about once a minute. No malloc here. */
+static void hb_vm_report(unsigned long long mb) {
+    static unsigned long long last, n;
+    unsigned long long tags[256], best;
+    vm_address_t a = 0;
+    vm_size_t sz = 0;
+    natural_t depth = 0;
+    struct vm_region_submap_info_64 info;
+    mach_msg_type_number_t c;
+    char out[200] = "bt3 vm: footprint 00000000 MB, dirty MB by region tag:";
+    size_t len = 54;
+    int k, j, bi;
+    char num[8];
+
+    n++;
+    if (!(mb >= last + 128 || last >= mb + 128 || n % 12 == 1)) {
+        return;
+    }
+    last = mb;
+    memset(tags, 0, sizeof(tags));
+    for (;;) {
+        c = VM_REGION_SUBMAP_INFO_COUNT_64;
+        if (vm_region_recurse_64(mach_task_self(), &a, &sz, &depth, (vm_region_recurse_info_t)&info, &c) != KERN_SUCCESS) {
+            break;
+        }
+        if (info.is_submap) {
+            depth++;
+            continue;
+        }
+        tags[info.user_tag & 255] += (unsigned long long)(info.pages_dirty + info.pages_swapped_out) * (unsigned long long)vm_page_size;
+        a += sz;
+    }
+    hb_dec(out + 18, mb);
+    for (k = 0; k < 6; k++) {
+        best = 0;
+        bi = -1;
+        for (j = 0; j < 256; j++) {
+            if (tags[j] > best) { best = tags[j]; bi = j; }
+        }
+        if (bi < 0 || (best >> 20) == 0) {
+            break;
+        }
+        out[len++] = ' ';
+        hb_dec(num, (unsigned long long)bi);
+        memcpy(out + len, num + 5, 3);
+        len += 3;
+        out[len++] = ':';
+        hb_dec(num, best >> 20);
+        memcpy(out + len, num, 8);
+        len += 8;
+        tags[bi] = 0;
+    }
+    out[len++] = '\n';
+    if (write(2, out, len) < 0) {
+    }
+}
+
 static void *heartbeat(void *arg) {
     unsigned long long sec = 0;
     struct stat beat_sb;
@@ -464,6 +524,7 @@ static void *heartbeat(void *arg) {
             if (write(2, ml, strlen(ml)) < 0) {
             }
         }
+        hb_vm_report(mb);
         if (ok) { /* where a loop stands: the registers, and the SPU heap table when the game is inside SpuHeap_* */
             char rl[400];
             size_t n = 0;
