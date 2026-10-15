@@ -95,7 +95,17 @@ extern int gGsNoBcTextures; /* gs_gl.c: the OpenGL ES renderer without DXT textu
    rewriting its texture memory, so in a fight the count climbs by hundreds every few seconds: on Android a smaller
    cache keeps the GPU memory lower (phones share it with everything else) and each sweep shorter (a sweep of
    thousands of textures in one frame is a stutter). With a texture pack on, the whole cache, as before. */
-#ifdef __ANDROID__
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+/* iOS (log 91): the PC limits (MAX_TEX textures, 6 GB) let the cache grow until iOS killed the app (jetsam,
+   memory-highwater, after LOW MEMORY events: 575 textures at frame 2250, 1531 at frame 3090). A phone gets the
+   Android limits, and the game's memory warning (gGsTrimTextures) drops everything not used this frame. */
+#if defined(__ANDROID__) || (defined(__APPLE__) && TARGET_OS_IPHONE)
+#define PORT_PHONE_CACHE 1
+#endif
+volatile int gGsTrimTextures; /* set by the host on a low-memory warning; texture_get sweeps at its next call */
+#ifdef PORT_PHONE_CACHE
 #define TEX_CAP (sTexPackOn && TexPack_Count() != 0 ? MAX_TEX : 3072) /* (a pack's textures come from storage: kept longer) */
 #else
 #define TEX_CAP MAX_TEX
@@ -103,6 +113,8 @@ extern int gGsNoBcTextures; /* gs_gl.c: the OpenGL ES renderer without DXT textu
 /* and how much GPU memory they may take: a texture pack's replacements can be megabytes each */
 #ifdef __ANDROID__
 #define TEX_BYTES_CAP (768ull << 20)
+#elif defined(PORT_PHONE_CACHE)
+#define TEX_BYTES_CAP (320ull << 20)
 #else
 #define TEX_BYTES_CAP (6ull << 30)
 #endif
@@ -200,6 +212,7 @@ static GsTex texture_get(int ctx) {
     uint64_t tex_t0;
     TexPackImage pack;
     uint64_t texBytes = 0;
+    int trim;
     uint32_t packMaxAlpha = 255, rw = tw, rh = th;
     int packFormat = GS_TEXFMT_RGBA8, replaced = 0;
 
@@ -236,12 +249,17 @@ static GsTex texture_get(int ctx) {
         tex_diag("no texture slots left, white", t0, 0);
         return gsWhite;
     }
-    if (gsTexCount >= TEX_CAP || sTexBytes > TEX_BYTES_CAP) {
+    trim = gGsTrimTextures;
+    if (trim) {
+        gGsTrimTextures = 0;
+        fprintf(stderr, "bt3 texdiag: frame %u low-memory warning, %d textures, %llu MB, trimming\n", gGsFrame, gsTexCount, (unsigned long long)(sTexBytes >> 20));
+    }
+    if (gsTexCount >= TEX_CAP || sTexBytes > TEX_BYTES_CAP || trim) {
         /* full (by count, or by size: a texture pack's replacements are large): drop everything not used for two
            seconds (or, failing that, not used this frame) in one sweep */
-        unsigned keep = gGsFrame > 120 ? gGsFrame - 120 : 0;
+        unsigned keep = trim ? gGsFrame : (gGsFrame > 120 ? gGsFrame - 120 : 0);
         int pass, n;
-        for (pass = 0; pass < 2 && (gsTexCount >= TEX_CAP || sTexBytes > TEX_BYTES_CAP); pass++, keep = gGsFrame) {
+        for (pass = 0; pass < 2 && (gsTexCount >= TEX_CAP || sTexBytes > TEX_BYTES_CAP || (trim && pass == 0)); pass++, keep = gGsFrame) {
             for (n = 0, i = 0; i < (uint32_t)gsTexCount; i++) {
                 if (sTex[i].last >= keep) {
                     sTex[n++] = sTex[i];

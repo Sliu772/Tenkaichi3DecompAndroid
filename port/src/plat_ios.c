@@ -273,6 +273,8 @@ static void on_other_signal(int sig, siginfo_t *si, void *ctx) {
     }
 }
 
+extern volatile int gGsTrimTextures; /* gs_draw.c: drop the textures not used this frame (low-memory warning) */
+
 static bool life_watch(void *userdata, void *event) {
     static int lines;
     uint32_t type = *(uint32_t *)event;
@@ -280,6 +282,9 @@ static bool life_watch(void *userdata, void *event) {
     int n;
 
     (void)userdata;
+    if (type == 0x102) { /* SDL_EVENT_LOW_MEMORY: iOS is about to kill the app (jetsam) unless it lets go of memory */
+        gGsTrimTextures = 1;
+    }
     if ((type >= 0x100 && type < 0x200) && lines++ < 100) { /* SDL3 application events: quit, terminating, low memory, (will) enter background / foreground */
         n = snprintf(b, sizeof(b), "bt3 life: SDL event 0x%x%s\n", type,
                      type == 0x100 ? " (QUIT)" : type == 0x101 ? " (TERMINATING)" : type == 0x102 ? " (LOW MEMORY)" :

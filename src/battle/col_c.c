@@ -104,10 +104,13 @@ extern void Tex_Upload(FontTex *tex, u32 tbp, s32 cbp); /* uploads a texture and
 extern void TexFile_UploadAll(void *res, void *tex, void *tex2);
 
 /* 0x239BB0..0x239EA0, defined above with the first part's types. */
+#ifndef PORT /* PORT (iOS, as eft_k.c in fix54): a cast to a function-pointer type becomes a 4-byte pointer under ptr32.py and the real
+                function takes 8-byte ones; the PORT build calls the definitions above through their own prototypes */
 #define Font_IsInClip ((s32 (*)(FontCmd *cmd, s32 x0, s32 y0, s32 x1, s32 y1))Font_IsInClip) /* 1 when the box touches the command's clip box */
 #define Font_BeginPacket ((void (*)(u64 **pkt))Font_BeginPacket)                                 /* Dma_BeginDirect + the 2D state */
 #define Font_EndPacket ((void (*)(u64 **pkt))Font_EndPacket)                                   /* Dma_EndDirect */
 #define Font_PutSprite ((void (*)(u64 **pkt, s32 x0, s32 y0, s32 x1, s32 y1, s32 u0, s32 v0, s32 u1, s32 v1, u32 color, u64 tex0))Font_PutSprite)                         /* one textured sprite */
+#endif
 
 #ifdef PORT
 /* PORT (iOS, log 89): the dialog's text is queued (2 commands, flushed every frame) but not one glyph sprite reaches
@@ -833,6 +836,18 @@ void Font_DrawCmd(u64 **pkt, FontCmd *cmd) {
         case FONT_CMD_STR16:
         case FONT_CMD_STR8:
             str = Font_CmdString(cmd);
+#ifdef PORT
+            {
+                static s32 sCmdLog;
+
+                if (sCmdLog < 40) { /* bring-up (iOS): what the printer reads from the string it is about to draw */
+                    sCmdLog++;
+                    Port_DiagNote("fontdiag cmd: first char, string set (0 = no)", str != NULL ? (s32)*(u16 *)str : -1, (s32)(cmd - gFontCmds) < FONT_STR_SLOTS ? sFontStr[cmd - gFontCmds] != NULL : -2);
+                    Port_DiagNote("fontdiag cmd: align, has tag callback", cmd->align, cmd->tag != NULL);
+                    Port_DiagNote("fontdiag cmd: scaleX*1000, x before align", (s32)(cmd->scaleX * 1000.0f), x);
+                }
+            }
+#endif
             x = Font_AlignLine(cmd, x, str);
             do {
                 if (kind == FONT_CMD_STR16 && cmd->tag != NULL) {
