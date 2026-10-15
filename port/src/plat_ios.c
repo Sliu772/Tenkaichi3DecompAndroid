@@ -447,7 +447,7 @@ static void hb_vm_report(unsigned long long mb) {
             depth++;
             continue;
         }
-        tags[info.user_tag & 255] += (unsigned long long)(info.pages_dirty + info.pages_swapped_out) * (unsigned long long)vm_page_size;
+        tags[info.user_tag & 255] += (unsigned long long)(info.pages_dirtied + info.pages_swapped_out) * (unsigned long long)vm_page_size;
         a += sz;
     }
     hb_dec(out + 18, mb);
