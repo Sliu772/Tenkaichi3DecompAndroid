@@ -6,6 +6,57 @@
 #include "sys/heap.h"
 #include "sys/pad.h"
 
+#ifdef PORT
+extern f32 BtlCharApi_GetHeight(s32 objId);
+extern void BtlCharApi_GetPos(s32 objId, Vec4 *out);
+extern void Mtx_InverseRT(Mtx44 *dst, Mtx44 *src);
+extern void Vu0View_LoadMtx(Mtx44 *mtx);
+extern void View_UpdateMatrices(View *view, Vec4 *pos);
+extern void View_Apply(View *view, s32 a);
+
+/* fix78: the animation cameras (character presentation, ready, special moves) are authored for a standard body; on other fighters the
+   eye ends up inside the model (it looks transparent). After DemoCam_Update the eye is kept 1.2 body heights from the fighter's middle,
+   keeping the camera's direction, and the view is applied again. */
+static void DemoCam_KeepClear(void) {
+    void *owner = gDemoCam->obj != NULL ? (void *)gDemoCam->obj : (void *)gDemoCam->chr;
+    Mtx44 inv;
+    f32 h;
+    Vec4 bp;
+    f32 mx, my, mz, dx, dy, dz, d, minD, k;
+    s32 oid;
+
+    if (owner == NULL) {
+        return;
+    }
+    oid = *(s32 *)((u8 *)owner + 0x10);
+    h = BtlCharApi_GetHeight(oid);
+    if (!(h >= 1.0f && h < 1000.0f)) {
+        return;
+    }
+    Mtx_InverseRT(&inv, &gDemoCam->view.world2view2);
+    BtlCharApi_GetPos(oid, &bp);
+    mx = bp.x;
+    my = bp.y - h * 0.5f; /* y is up-negative */
+    mz = bp.z;
+    dx = inv.m[3][0] - mx;
+    dy = inv.m[3][1] - my;
+    dz = inv.m[3][2] - mz;
+    d = __builtin_sqrtf(dx * dx + dy * dy + dz * dz);
+    minD = h * 1.2f;
+    if (d < minD && d > 0.001f) {
+        k = minD / d;
+        inv.m[3][0] = mx + dx * k;
+        inv.m[3][1] = my + dy * k;
+        inv.m[3][2] = mz + dz * k;
+        Mtx_InverseRT(&gDemoCam->view.world2view2, &inv);
+        Vu0View_LoadMtx(&gDemoCam->view.world2view2);
+        View_UpdateMatrices(&gDemoCam->view, (Vec4 *)inv.m[3]);
+        View_Apply(&gDemoCam->view, 1);
+    }
+}
+#endif
+
+
 /* Battle camera, 0x23E040-0x23F620. See battle/btl_cam.h for the structures and the per-frame flow. */
 
 extern void *memset(void *dst, s32 c, u32 n);
@@ -544,6 +595,9 @@ s32 BtlCam_UpdateOverride(void) {
     }
     if (DemoCam_IsActive() != 0) {
         DemoCam_Update();
+#ifdef PORT
+        DemoCam_KeepClear();
+#endif
         ret = 1;
     }
     return ret;

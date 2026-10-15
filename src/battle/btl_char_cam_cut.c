@@ -255,6 +255,10 @@ void ChrCam_CalcCut(ChrCamChr *chr, Vec4 *eye, Vec4 *rot, Vec4 *target) {
             if (sTrace < 60 && chr->cut.unk0 == 0 && chr->cut.unk4 == 6 && (cut->timer % 3) == 0) {
                 sTrace++;
                 Port_DiagNote("camera cut 6: eye to body (horizontal) x1000, limit x1000", (s32)(d * 1000.0f), (s32)(minR * 1000.0f));
+                Port_DiagNote("camera cut 6: applied distance x1000, progress x1000", (s32)(dist * 1000.0f), (s32)(t * 1000.0f));
+                Port_DiagNote("camera cut 6: cut start distance x1000, cut change x1000", (s32)(cut->valC * 1000.0f), (s32)(cut->valCDelta * 1000.0f));
+                Port_DiagNote("camera cut 6: yaw x1000, pitch x1000", (s32)(yaw * 1000.0f), (s32)(pitch * 1000.0f));
+                Port_DiagNote("camera cut 6: frames total, timer", cut->total, cut->timer);
             }
             if (d < minR) {
                 if (d < 0.01f) {

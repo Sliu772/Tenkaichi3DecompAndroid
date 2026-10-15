@@ -1,107 +1,111 @@
-# Tenkaichi 3 Decomp Android — corregir los defectos visuales visibles y la cámara de animaciones
+hey
 
-Estoy trabajando en Tenkaichi 3 Decomp Android. Necesito que inspecciones las capturas de pantalla, los archivos del proyecto y los nuevos logs que voy a adjuntar para corregir los problemas visuales que todavía existen.
+Hey! What’s on your mind today?
 
-**No quiero otra explicación genérica ni una lista de cosas que podría investigar. Quiero que examines lo que realmente aparece en pantalla, encuentres las causas en el código y realices las modificaciones necesarias.**
+bt3-ir (79).zip
+bt3-ir (79).zip
+ZIP
+bt3_fix75.zip
+bt3_fix75.zip
+ZIP
+bt3_log - 2026-10-15T175153.763.txt
+bt3_log - 2026-10-15T175153.763.txt
+TXT
+bt3-ios-link (84).zip
+bt3-ios-link (84).zip
+ZIP
+bt3-ir (78).zip
+bt3-ir (78).zip
+ZIP
+bt3_log - 2026-10-15T191222.699.txt
+bt3_log - 2026-10-15T191222.699.txt
+TXT
+bt3_fix78.zip
+bt3_fix78.zip
+ZIP
+bt3_fix77.zip
+bt3_fix77.zip
+ZIP
+bt3_fix76.zip
+bt3_fix76.zip
+ZIP
+bt3_log - 2026-10-15T183717.984.txt
+bt3_log - 2026-10-15T183717.984.txt
+TXT
+bt3-ios-link (85).zip
+bt3-ios-link (85).zip
+ZIP
+Tenkaichi3DecompAndroid_git.zip
+Tenkaichi3DecompAndroid_git.zip
+ZIP
 
-## 1. Inspecciona visualmente las capturas
+Para aplicarlo, descomprime todo el ZIP y ejecuta .\aplicar.ps1. Usa tu ruta por defecto, hace copia de seguridad (bt3_fix75_backup_…) y sobrescribe esos tres archivos. Los avisos census del paquete anterior siguen en eft_z.c y eft_e.c y no estorban. Bt3 fix75 ZIP bt3_log - 2026-10-15T183717
 
-Abre y examina las imágenes que adjunte. No te limites a leer los logs: los errores gráficos pueden ser evidentes visualmente aunque el log no muestre un error explícito.
+pasted
 
-Presta atención a:
+bt3_pipelines (46).txt
+bt3_pipelines (46).txt
+172 líneas
+TXT
+bt3_pipelines (48).txt
+bt3_pipelines (48).txt
+40 líneas
+TXT
+bt3_pipelines (47).txt
+bt3_pipelines (47).txt
+40 líneas
+TXT
+no quiero preguntas, solo correciones.
 
-- Efectos y partículas que aparecen dispersos por el mapa, flotan en lugares incorrectos, permanecen en pantalla cuando no deberían o aparecen sin relación con la acción del juego.
-- Efectos gráficos que se muestran incompletos, deformados, desplazados, con colores incorrectos o con tamaños y posiciones anómalos.
-- Elementos que deberían estar unidos a un personaje, una animación, un ataque o un evento, pero aparecen en otra parte del escenario.
-- Texturas, modelos, transparencias, iluminación y materiales que se ven negros, rojos, blancos, azules o de cualquier otra forma incorrecta.
-- Elementos gráficos que aparecen de repente, desaparecen, se duplican o permanecen congelados.
-- Cualquier otro defecto que pueda identificarse directamente en las imágenes.
+Empiezo revisando los archivos nuevos y los logs.
 
-No des por hecho que todos los efectos dispersos tienen la misma causa. Examina cada patrón visual y determina si puede proceder de matrices incorrectas, coordenadas locales o globales, referencias inválidas, memoria reutilizada, estados de efectos que no se reinician, sincronización incorrecta o problemas de renderizado.
+Ejecutó 26 comandos, archivos compartidos
+Hice bt3_fix79.zip, pero solo quita los dos parches. No encontré todavía por qué las esferas quedan fijas, y no pude compilar ni ejecutar el juego (solo comprobación de sintaxis con gcc).
 
-**Si puedes ver el defecto en una captura, descríbelo de forma concreta y utilízalo como evidencia para orientar la investigación.** No afirmes haber visto un fallo si la imagen no permite confirmarlo.
+Lo que cambia
 
-## 2. Cámara de animaciones y transformaciones: sigue sin estar arreglada
+Quité el borrado por distancia (fix75) y el borrado por tiempo sin movimiento (fix77) de los sprites sin vida propia. Eran parches: mataban cualquier sprite que el dueño no moviera cada frame o que estuviera lejos de los dos luchadores, como un aura sostenida. Eso encaja con que los efectos se limpiaran del mapa después de unos segundos.
+Se mantiene el borrado por dueño. Un sprite sin vida propia se termina cuando su emisor ya no lo tiene en su tabla, y también cuando muere la tarea del emisor.
+Añadí un registro acotado: si un sprite sin vida propia sigue vivo 40 segundos sin estar en fade-out, el log anota su luchador, tipo de efecto, posición y si su emisor aún lo tiene. Máximo 24 entradas.
+Es posible que las esferas vuelvan a verse más tiempo, porque ya no hay borrado por distancia.
+Las cámaras de fix78 no se tocaron.
+Lo que descarté
 
-Este es un problema importante y debe tratarse como una corrección pendiente, no como algo que ya funciona.
+En tus tres logs el censo de sprites sin vida propia solo salió una vez, con 0 sprites, y nunca salió la línea de sprites huérfanos terminados. Eso indica que las esferas probablemente no son estos sprites de billboard.
+Revisé las incompatibilidades de firmas del informe del port y no explican las esferas: son retornos void que se ignoran y un argumento que siempre es 0.
+Mientras buscaba, vi que en EftBlastObj_PostUpdate un disparo que choca queda fijo con resultado 3 y sigue vivo hasta que se acaba su vida. Es el comportamiento documentado del original, así que no lo toqué sin evidencia.
+Para aplicarlo, descomprime todo el ZIP y ejecuta .\aplicar.ps1. Sobrescribe solo src\battle\eft_z.c y deja una copia de seguridad (bt3_fix79_backup_…).
 
-Durante determinadas animaciones, especialmente las transformaciones, la cámara se mueve de manera incorrecta, se acerca excesivamente al personaje y puede llegar a atravesarlo. El movimiento de la cámara parece incorrecto o autónomo y la distancia de encuadre no se mantiene como debería.
+Si las esferas reaparecen, el próximo log traerá las líneas “long-lived endless sprite”, que dirán a quién pertenecen y por qué siguen vivas.
 
-Necesito que investigues y corrijas específicamente:
 
-- Por qué la cámara cambia su posición durante esas animaciones.
-- Qué función, estado, interpolación, trayectoria o parámetro provoca que se acerque demasiado.
-- Por qué continúa acercándose hasta penetrar o atravesar el modelo del personaje.
-- Si se están aplicando simultáneamente varias actualizaciones de cámara, matrices, desplazamientos o interpolaciones incompatibles.
-- Si la cámara recibe datos incorrectos durante el cambio de estado o la reproducción de la animación.
-- Si existe una diferencia entre la lógica de cámara normal y la lógica utilizada en las cinemáticas o transformaciones.
+Bt3 fix79
+ZIP 
+Tienes razón. Voy a leer los tres logs completos, línea por línea en lo relevante, y solo reporto lo que aparezca en ellos.
 
-### Restricción fundamental
+Ejecutó 14 comandos, archivos compartidos
+Leí los tres logs. Para las esferas no hay nada en ellos, y para la cámara de transformación hay datos claros pero no la causa. No corregí ninguna de las dos.
 
-**La cámara del combate normal funciona bien. No la modifiques globalmente.**
+Esferas
 
-La corrección debe afectar únicamente a las animaciones, transformaciones o estados cinematográficos que presentan el problema. No reduzcas el zoom de todo el juego, no cambies indiscriminadamente la distancia general de la cámara y no apliques un desplazamiento global como solución rápida.
+El censo de sprites sin vida propia salió una sola vez en los tres logs (log 191222, línea 4519), con 0 sprites, justo antes de empezar la pelea. Nunca volvió a salir, así que ese contador no me da información sobre las esferas.
+El contador de sprites vivos llega a 8 hacia el frame 2940, antes de cualquier disparo o transformación, y a 16 hacia el frame 4290, después de la primera transformación. No sé a qué corresponden.
+Las líneas de sprites huérfanos terminados no aparecen en ningún log.
+Los draws por frame en pelea se mantienen entre 2237 y 2553, sin crecimiento sostenido. Eso no apunta a objetos acumulándose.
+Cámara de transformación
 
-Encuentra el origen del movimiento incorrecto y corrige la lógica responsable. Si necesitas ajustar límites de distancia, seguimiento, interpolación o posición, hazlo en el contexto específico de esas animaciones.
+Los tres logs muestran el ojo de la cámara a 397–438 unidades del cuerpo en el corte 6, con fix75 y con fix78. La altura del luchador es 21.6 y el límite que puse es 7.4. En el log de fix76 (piso de 2.5 alturas) esa distancia fue de 2700 a 3000 unidades.
+La distancia que ese corte pide, según el registro de inicio de corte, es 21.65 (una altura, que es el piso que puse). Con esa distancia el ojo no podría quedar a 410 del cuerpo, así que algo en el cálculo no cuadra.
+No sé qué lo causa. Eso significa que mis pisos de distancia no eran la causa, y que los cambios anteriores de cámara no arreglaban lo que pensaba.
+El paquete bt3_fix80.zip incluye lo de fix79 (sin los borrados por distancia ni por tiempo) y agrega al registro del corte 6 la distancia aplicada, el progreso, los valores de inicio y cambio, los ángulos y los frames. No corrige nada de lo que ves en pantalla; solo da los datos que faltan. Para aplicarlo, descomprime todo y ejecuta .\aplicar.ps1: sobrescribe eft_z.c y btl_char_cam_cut.c con copia de seguridad.
 
-Comprueba también que la cámara no atraviese al personaje durante toda la secuencia y que las transiciones de entrada y salida de la animación no provoquen saltos o movimientos bruscos.
+Tienes razón en estar molesto: mis mensajes anteriores presentaron hipótesis como si fueran conclusiones.
 
-No des este problema por resuelto simplemente porque modificaste un parámetro. La solución debe tener una explicación técnica y, si puedes ejecutar el juego, debe probarse durante una transformación.
 
-## 3. Investiga las causas en el código del proyecto
+Bt3 fix80
+ZIP 
+ok pero ya te explique sobre esos efectos, lo correcto es que desaparezcan se limpien tras usarse, no quedarse por el mapa, lo que lo limpia debe ser el manejador sobre eso, porque ya sea el cpu rival o yo si nos alejamos desaparece o si queda fuera de camara
 
-Utiliza las capturas para identificar los síntomas y los logs nuevos para investigar qué sucede internamente. Después, sigue el flujo de ejecución hasta encontrar las funciones responsables.
+Tracing how effect stop flags control fade-out and deletion.
+Entendido: el manejador debe limpiar el efecto al terminar su uso. Voy al código que decide cuándo se detiene cada efecto (el emisor que da la orden de parar) y no a nada que lo oculte.
 
-Examina, según corresponda:
-
-- Gestión, creación, actualización y destrucción de efectos y partículas.
-- Posiciones de origen, matrices de transformación y conversión entre coordenadas locales, del personaje y del mundo.
-- Seguimiento de huesos, modelos, animaciones y estados de los personajes.
-- Sincronización de los efectos con los fotogramas y eventos de las animaciones.
-- Gestión de memoria y reutilización de estructuras para efectos.
-- DMA, GS, VU1, texturas, buffers, pipelines y render targets cuando la evidencia los relacione con el defecto.
-- Funciones de cámara, secuencias cinematográficas, transformaciones, interpolaciones y transiciones entre estados.
-
-No cambies archivos al azar ni asumas que un problema de partículas necesariamente se debe al renderizador. Un efecto que aparece en un lugar incorrecto también podría estar recibiendo una matriz o posición incorrecta antes de llegar al renderizador.
-
-Distingue entre el lugar donde se observa el error y el punto donde realmente se origina.
-
-## 4. Usa los nuevos logs, no conclusiones antiguas
-
-Los logs que adjuntaré serán nuevos. Examínalos específicamente y relaciona sus eventos con los defectos visibles cuando exista evidencia para hacerlo.
-
-- Busca los primeros indicios del problema, no solamente los errores que aparecen después.
-- Correlaciona fotogramas, estados, creación de efectos, actualizaciones de cámara y operaciones gráficas.
-- Comprueba si hay valores inválidos, recursos duplicados, estados que no se reinician o acumulación de recursos.
-- No inventes direcciones, cifras, mensajes de error ni conclusiones.
-- Si un defecto visual no deja información suficiente en los logs, investígalo mediante el código y señala qué pruebas adicionales permitirían confirmarlo.
-
-No busques en Internet. Trabaja únicamente con los archivos que adjunte y el código del proyecto.
-
-## 5. No rompas las correcciones que ya funcionan
-
-- Los ataques de ki y energía **ya están corregidos**. No los modifiques ni reviertas su arreglo.
-- El audio y los diálogos funcionan correctamente. No los modifiques.
-- El combate normal y su cámara funcionan correctamente. Conserva su comportamiento.
-- No reviertas correcciones anteriores sin demostrar primero que causan una regresión reproducible.
-- Evita parches que simplemente oculten errores, descarten operaciones o ignoren estados inválidos sin resolver la causa real.
-
-Si necesitas modificar una función compartida, asegúrate de que los cambios estén limitados al estado que presenta el defecto y comprueba que no afecten a las funciones que ya trabajan correctamente.
-
-## 6. Entrega cambios reales y verificables
-
-Quiero que trabajes directamente sobre los archivos del proyecto.
-
-1. Examina las capturas y enumera los defectos visuales que puedas confirmar.
-2. Localiza las funciones relacionadas con esos defectos.
-3. Corrige los errores cuya causa puedas identificar con suficiente evidencia.
-4. Revisa los cambios para evitar regresiones.
-5. Compila y prueba el proyecto si el entorno lo permite.
-6. Entrega un ZIP con los archivos corregidos o un paquete completo de cambios que pueda aplicar al proyecto original.
-7. Explica brevemente qué archivos y funciones modificaste, qué causa corregiste y cómo puede verificarse cada solución.
-
-Prioriza primero la cámara de las transformaciones y animaciones, porque sigue acercándose demasiado y atraviesa al personaje. Después, aborda los efectos y partículas que se ven fuera de lugar en el mapa y los demás defectos gráficos confirmados en las capturas.
-
-Si un problema no puede resolverse con la evidencia disponible, indica exactamente qué falta para confirmarlo. No declares que está arreglado si solamente añadiste una protección o si no pudiste probarlo.
-
-**Empieza inspeccionando las imágenes adjuntas y el proyecto. Identifica los defectos visuales reales, investiga sus causas y realiza las correcciones. No busques en Internet, no vuelvas a modificar los ataques de energía ni el audio, y no alteres la cámara del combate normal.**
