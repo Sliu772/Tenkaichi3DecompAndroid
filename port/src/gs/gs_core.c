@@ -1447,6 +1447,7 @@ static void run_chain(uint32_t tadr, int tte) {
     uint32_t stack[2], sp = 0;
     int guard;
     int fresh = 0; /* 1 for the tag a CALL has just jumped to */
+    uint32_t ringT[8], ringA[8], ringB[8], ringN = 0; /* fix75 (log 98): the last tags walked, printed when the walk stops at address 0 */
 
     for (guard = 0; guard < 100000; guard++) {
         const uint32_t *tag = Gs_ChainAddrOk(tadr, 1) ? (const uint32_t *)Port_A2P(tadr) : NULL;
@@ -1456,9 +1457,22 @@ static void run_chain(uint32_t tadr, int tte) {
             if (sNullTag++ < 16) {
                 fprintf(stderr, "bt3 gs: frame %u: the DMA chain reached address 0 (depth %u, tag %d), walk stopped\n", sFrame, sp, guard);
             }
+            {   /* fix75: which tag sent the walk to 0 (id 2 = NEXT, 5 = CALL, 6 = RET with a bad stack) and what the tags before it were */
+                static unsigned sRingPrint;
+                if (sRingPrint < 3) {
+                    uint32_t k, from = ringN > 8 ? ringN - 8 : 0;
+                    sRingPrint++;
+                    fprintf(stderr, "bt3 gs: frame %u: next address %08x; the last tags walked (address: word0 word1 | id qwc addr):\n", sFrame, tadr);
+                    for (k = from; k < ringN; k++) {
+                        fprintf(stderr, "bt3 gs:   %08x: %08x %08x | id %u qwc %u addr %08x\n", ringT[k & 7], ringA[k & 7], ringB[k & 7],
+                                (ringA[k & 7] >> 28) & 7, ringA[k & 7] & 0xFFFF, ringB[k & 7]);
+                    }
+                }
+            }
             break;
         }
         qwc = tag[0] & 0xFFFF; id = (tag[0] >> 28) & 7; addr = tag[1];
+        ringT[ringN & 7] = tadr; ringA[ringN & 7] = tag[0]; ringB[ringN & 7] = tag[1]; ringN++;
         const int first = fresh; /* the first tag of a called chain */
         fresh = 0;
         const uint32_t *data;
@@ -1504,6 +1518,22 @@ static void run_chain(uint32_t tadr, int tte) {
                 break;
             }
             continue;
+        }
+        if ((id == 3 || id == 4) && qwc >= 1000 && data != NULL) { /* fix75 (log 98): a texture block the chain names is read as GIF tags that are really pixels from frame 14772 on, in the stage's own data. Says WHEN a block's words change between frames. */
+            static uint32_t blkAddr[64], blkHash[64];
+            static unsigned blkN, blkLogged;
+            uint32_t k, h = 2166136261u, slot = 64;
+            for (k = 0; k < 16; k++) { h = (h ^ data[k]) * 16777619u; }
+            for (k = 0; k < 16; k++) { h = (h ^ data[qwc * 4 - 1 - k]) * 16777619u; }
+            for (k = 0; k < blkN; k++) { if (blkAddr[k] == addr) { slot = k; break; } }
+            if (slot == 64 && blkN < 64) { slot = blkN++; blkAddr[slot] = addr; blkHash[slot] = h; }
+            else if (slot < 64 && blkHash[slot] != h) {
+                if (blkLogged++ < 24) {
+                    fprintf(stderr, "bt3 gs: frame %u: texture block at %08x (%u qwords, tag at %08x) changed: first words %08x %08x %08x %08x\n",
+                            sFrame, addr, qwc, (unsigned)Port_P2A(tag), data[0], data[1], data[2], data[3]);
+                }
+                blkHash[slot] = h;
+            }
         }
         if (id == 3 && qwc >= 1000 && port_tex_diag()) { /* bring-up (iOS): what the chain walk sees in a texture block, printed when it changes (only with BT3_GS_TEXDIAG set: with more than 16 blocks per frame it printed every block of every frame) */
             static uint32_t keyA[16], keyN[16];
