@@ -49,14 +49,14 @@ void ChrCam_CalcCut(ChrCamChr *chr, Vec4 *eye, Vec4 *rot, Vec4 *target) {
     }
 #ifdef PORT
     {
-        static s32 sCuts; /* fix72: what each camera cut asks for (transformations, finishers), to find why it sits too close */
+        static s32 sCuts; /* fix73: s32 casts (a long cast calls __fixsfdi, which the port lacks and aborts); what each camera cut asks for (transformations, finishers), to find why it sits too close */
 
         if (sCuts < 24 && cut->total > 0 && cut->timer == cut->total) {
             sCuts++;
             Port_DiagNote("camera cut: frames, flags", cut->total, cut->flags);
-            Port_DiagNote("camera cut: distance x1000, change x1000", (long)(cut->valC * 1000.0f), (long)(cut->valCDelta * 1000.0f));
+            Port_DiagNote("camera cut: distance x1000, change x1000", (s32)(cut->valC * 1000.0f), (s32)(cut->valCDelta * 1000.0f));
             Port_DiagNote("camera cut: eye node, look node", cut->unk88, cut->unk90);
-            Port_DiagNote("camera cut: fighter height x1000, object id", (long)(BtlCharApi_GetHeight(chr->objId) * 1000.0f), chr->objId);
+            Port_DiagNote("camera cut: fighter height x1000, object id", (s32)(BtlCharApi_GetHeight(chr->objId) * 1000.0f), chr->objId);
         }
     }
 #endif

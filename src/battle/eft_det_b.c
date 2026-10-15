@@ -107,22 +107,72 @@ void StgCol_SetModeObjects(void) {
 
 /* Walks every collision mesh of a zone that is in force against `box`, calling `cb(node, ctx)` for each candidate
    node, and reports what was touched. */
+#ifdef PORT
+extern void Port_DiagNote(const char *what, long a, long b);
+#endif
 s32 StgCol_QueryZone(StgColResult *res, StgColZone *zone, StgColBox *box, void *ctx, StgColCb cb) {
     StgColObj *objs = gBtlStage->objs;
-    StgColRec *recs = zone->recs;
+    StgColRec *recs;
     s32 i;
+    s32 recCount;
 
     memset(res, 0, sizeof(StgColResult));
+#ifdef PORT
+    /* fix74 (iOS, log 97): ColMesh_WalkBox read a NULL mesh (addr 0x0 / 0xC) and this loop read objs[] / recs[] at host addresses
+       far outside the game's memory (0x17074fd30, 0x12bb8d020), so a zone whose data was not what the game expects fed garbage into
+       the stage collision (fighters stuck, no ground hit). A zone holds at most 64 records (recMask is 64 bits). Anything else is
+       skipped here and logged once, so the next log says which zone and which value. */
+    if (zone == NULL || zone->recCount < 0 || zone->recCount > 64) {
+        static s32 sBadZone;
+
+        if (sBadZone < 8) {
+            sBadZone++;
+            Port_DiagNote("stage collision: bad zone, recCount", (s32)(zone != NULL), zone != NULL ? zone->recCount : -1);
+        }
+        if (zone == NULL) {
+            return 0;
+        }
+    }
+#endif
+    recs = zone->recs;
+    recCount = zone->recCount;
+#ifdef PORT
+    if (recCount < 0 || recCount > 64) {
+        recCount = 0;
+    }
+#endif
     if (gStgColMode == 0) {
         gStgColMesh = zone->mesh;
+#ifdef PORT
+        if (gStgColMesh == NULL) {
+            static s32 sNoMesh;
+
+            if (sNoMesh < 8) {
+                sNoMesh++;
+                Port_DiagNote("stage collision: zone without mesh, zone recCount", (s32)(zone->mesh == NULL), zone->recCount);
+            }
+        } else
+#endif
         if (ColMesh_WalkBox(gStgColMesh, box, ctx, cb)) {
             res->hit = 1;
             res->ground = 1;
         }
     }
-    for (i = 0; i < zone->recCount; i++) {
+    for (i = 0; i < recCount; i++) {
         StgColRec *rec = &recs[i];
 
+#ifdef PORT
+        if (i >= 64 || rec->mesh == NULL || (u32)rec->obj >= gBtlStage->objCount) {
+            static s32 sBadRec;
+
+            if (sBadRec < 8) {
+                sBadRec++;
+                Port_DiagNote("stage collision: bad record, index obj", i, rec->obj);
+                Port_DiagNote("stage collision: record mesh set, object count", (s32)(rec->mesh != NULL), (s32)gBtlStage->objCount);
+            }
+            continue;
+        }
+#endif
         if (rec->broken) {
             if (!(objs[rec->obj].state & 1)) {
                 continue;

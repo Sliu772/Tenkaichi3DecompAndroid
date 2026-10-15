@@ -126,6 +126,23 @@ int32_t __fixsfsi(uint32_t a) {
     return (a & SIGN) ? -(int32_t)v : (int32_t)v;
 }
 
+/* float -> 64-bit signed (a (long) or (s64) cast of a float): truncates; out of range gives the largest / smallest value. fix73:
+   it was missing, so the first such cast aborted the game ("not implemented yet: __fixsfdi"). */
+int64_t __fixsfdi(uint32_t a) {
+    int32_t e = (int32_t)((a >> 23) & 0xFF) - 127;
+    uint64_t m = (a & 0x7FFFFF) | 0x800000;
+    uint64_t v;
+
+    if (e < 0) {
+        return 0;
+    }
+    if (e >= 63) {
+        return (a & SIGN) ? (int64_t)0x8000000000000000ull : 0x7FFFFFFFFFFFFFFFll;
+    }
+    v = e >= 23 ? m << (e - 23) : m >> (23 - e);
+    return (a & SIGN) ? -(int64_t)v : (int64_t)v;
+}
+
 /* The PS2 compiler's float -> unsigned: values of 2^31 and above go through (x - 2^31) and get the top bit. */
 uint32_t __fixunssfsi(uint32_t a) {
     if (!RefVu0_LtBits(a, 0x4F000000u)) {
