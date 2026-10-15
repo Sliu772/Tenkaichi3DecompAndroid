@@ -38,6 +38,22 @@
 #include <string.h>
 #include "gs_internal.h"
 
+/* fix68 (iOS): the game puts a pointer into the command's words as a plain (s32) cast, and that is the LOW HALF OF THE REAL
+   ADDRESS, i.e. offset + the ASLR slide, not the offset Port_A2P wants. Log 95 and 96 show it: the same bank's hd/sq were
+   07c3d210 in one run and 0a771210 in the next (spu, which is not a pointer, was identical), so the effect lookup read some
+   other memory and every effect was "not in the bank's tables". A value that becomes a valid offset after taking the header
+   away is that; anything else is already an offset and stays. */
+#ifdef __APPLE__
+extern char _mh_execute_header[] __attribute__((visibility("hidden")));
+static uint32_t se_game_addr(uint32_t v) {
+    uint32_t off = v - (uint32_t)(uintptr_t)_mh_execute_header;
+
+    return (v != 0 && off != 0 && off < 0x20000000u) ? off : v;
+}
+#else
+#define se_game_addr(v) (v)
+#endif
+
 #define SPU_SIZE 0x200000
 #define VOICES 48
 #define OUT_RATE 48000
@@ -517,11 +533,11 @@ int sceSifCallRpc(void *client, int fno, int mode, void *send, int sendSize, voi
     case 0x3: { /* SET_BANK: mask, where the samples are, the header table, the sequence table */
         int slot = slot_of(w[0]);
         if (slot >= 0) {
-            { static int sSet; if (sSet++ < 12) { fprintf(stderr, "bt3 se: SET_BANK slot %d: spu %08x hd %08x sq %08x\n", slot, (unsigned)w[1], (unsigned)w[2], (unsigned)w[3]); } }
+            { static int sSet; if (sSet++ < 12) { fprintf(stderr, "bt3 se: SET_BANK slot %d: spu %08x hd %08x sq %08x\n", slot, (unsigned)w[1], (unsigned)w[2], (unsigned)w[3]); fprintf(stderr, "bt3 se: SET_BANK slot %d as game addresses: hd %08x sq %08x\n", slot, (unsigned)se_game_addr((uint32_t)w[2]), (unsigned)se_game_addr((uint32_t)w[3])); } }
             sBanks[slot].set = 1;
             sBanks[slot].spu = (uint32_t)w[1];
-            sBanks[slot].hd = (const uint8_t *)Port_A2P((uint32_t)w[2]);
-            sBanks[slot].sq = (const uint8_t *)Port_A2P((uint32_t)w[3]);
+            sBanks[slot].hd = (const uint8_t *)Port_A2P(se_game_addr((uint32_t)w[2]));
+            sBanks[slot].sq = (const uint8_t *)Port_A2P(se_game_addr((uint32_t)w[3]));
             sBanks[slot].paused = 0;
             if (sBanks[slot].volume == 0.0f) { sBanks[slot].volume = 1.0f; }
             voice_own_bank(slot);
