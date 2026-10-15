@@ -45,13 +45,8 @@ void ChrCam_CalcCut(ChrCamChr *chr, Vec4 *eye, Vec4 *rot, Vec4 *target) {
     usedOpp = 0;
     usedMid = 0;
     if (cut->total > 0) {
-    t = 1.0f - (f32)cut->timer / (f32)cut->total;
-    if (t < 0.0f) {
-        t = 0.0f;
-    } else if (t > 1.0f) {
-        t = 1.0f;
+        t = 1.0f - (f32)cut->timer / (f32)cut->total;
     }
-}
 #ifdef PORT
     {
         static s32 sCuts; /* fix73: s32 casts (a long cast calls __fixsfdi, which the port lacks and aborts); what each camera cut asks for (transformations, finishers), to find why it sits too close */
