@@ -860,6 +860,25 @@ void ChrCam_StartCut(ChrCamChr *chr) {
     valBDelta = def->pitchDelta * pi / 180.0f;
     valC = def->dist * scale;
     valCDelta = def->distDelta * scale;
+#ifdef PORT
+    /* The cut that closes a transformation (a character's own table, index 6) is a face close-up on the console:
+       0.4 body heights (log 2026-10-15: distance 8661 for a height of 21653), which fills a phone's wide screen.
+       Only that cut is held at least one body height away, at its start and at its end; the fight camera and every
+       other cut are not touched. (The eye is not inside the body here -- the clearance test in ChrCam_CalcCut sees it
+       far away and never fires -- so the distance itself is what has to change.) */
+    if (chr->cut.unk0 == 0 && chr->cut.unk4 == 6 && scale >= 1.0f && scale < 1000.0f) {
+        f32 endDist = valC + valCDelta;
+        f32 minDist = scale;
+
+        if (valC < minDist) {
+            valC = minDist;
+        }
+        if (endDist < minDist) {
+            endDist = minDist;
+        }
+        valCDelta = endDist - valC;
+    }
+#endif
     time = def->seconds * 30.0f;
     if (time <= 0) {
         time = 1;
