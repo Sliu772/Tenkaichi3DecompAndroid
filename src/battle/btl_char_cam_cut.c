@@ -184,6 +184,55 @@ void ChrCam_CalcCut(ChrCamChr *chr, Vec4 *eye, Vec4 *rot, Vec4 *target) {
     dir.y = Mathf_Sin(pitch);
     dir.z = Mathf_Cos(pitch) * Mathf_Cos(yaw);
     Vec4_Scale(&dir, &dir, dist);
+#ifdef PORT
+    {
+        /* fix74: the cut's own-fighter nodes (eye base node A, look node C) are read from the model's node matrices. In the
+           transformation closing cut (cut 6) the log showed the eye 26..115 units from the body while the cut asks for
+           8.7 (limit 7.4), i.e. the node position does not follow the fighter right after the model swap. When a node
+           of the fighter's own is farther than 1.5 body heights from the body, the body position stands in for it
+           (eye base at the body's middle, look at the head height); the angles and the distance are the cut's own. */
+        f32 h = BtlCharApi_GetHeight(chr->objId);
+        static s32 sFix;
+        static s32 sTrace2;
+
+        if (h >= 1.0f && h < 1000.0f && cut->unk0 == 0) {
+            f32 bx = chr->body.pos.x;
+            f32 by = chr->body.pos.y;
+            f32 bz = chr->body.pos.z;
+            f32 ex = eye->x - bx;
+            f32 ez = eye->z - bz;
+            f32 lx = look.x - bx;
+            f32 lz = look.z - bz;
+            f32 de = __builtin_sqrtf(ex * ex + ez * ez);
+            f32 dl = __builtin_sqrtf(lx * lx + lz * lz);
+
+            if (sTrace2 < 16 && cut->unk4 == 6 && (cut->timer % 3) == 0) {
+                sTrace2++;
+                Port_DiagNote("camera cut 6: eye base x z x1000", (s32)(eye->x * 1000.0f), (s32)(eye->z * 1000.0f));
+                Port_DiagNote("camera cut 6: body x z x1000", (s32)(bx * 1000.0f), (s32)(bz * 1000.0f));
+                Port_DiagNote("camera cut 6: look x z x1000", (s32)(look.x * 1000.0f), (s32)(look.z * 1000.0f));
+            }
+            if (cut->unk88 >= 0 && !(cut->unk88 & (CHRCUT_NODE_OPP | CHRCUT_NODE_MID)) && de > h * 1.5f) {
+                eye->x = bx;
+                eye->y = by - h * 0.5f; /* y is up-negative */
+                eye->z = bz;
+                if (sFix < 20) {
+                    sFix++;
+                    Port_DiagNote("camera cut: eye base node far from body, body used; distance x1000, height x1000", (s32)(de * 1000.0f), (s32)(h * 1000.0f));
+                }
+            }
+            if (cut->unk90 >= 0 && !(cut->unk90 & (CHRCUT_NODE_OPP | CHRCUT_NODE_MID)) && dl > h * 1.5f) {
+                look.x = bx;
+                look.y = by - h * 0.8f;
+                look.z = bz;
+                if (sFix < 20) {
+                    sFix++;
+                    Port_DiagNote("camera cut: look node far from body, body used; distance x1000, height x1000", (s32)(dl * 1000.0f), (s32)(h * 1000.0f));
+                }
+            }
+        }
+    }
+#endif
     Vec4_Sub(eye, eye, &dir);
 #ifdef PORT
     {

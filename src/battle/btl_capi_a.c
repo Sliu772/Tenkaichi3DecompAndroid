@@ -526,6 +526,30 @@ void BtlCharApi_GetNodePos(s32 objId, s32 node, Vec4 *out) {
         n = BtlObj_GetNode(obj, node);
         if (n != NULL) {
             Vec4_Copy(out, (Vec4 *)&n->mtx.m[3]);
+#ifdef PORT
+            {
+                /* fix74: after a model swap (transformation) the node matrices of the new model are not at the fighter: the camera
+                   eye was 26..115 units from the body and the ki / aura emitters hang loose over the map. A node of a fighter cannot
+                   be farther than ~2.5 body heights from its object; when it is, the object position (raised to mid body) stands in. */
+                f32 h = obj->height;
+                f32 dx = out->x - obj->pos.x;
+                f32 dy = out->y - obj->pos.y;
+                f32 dz = out->z - obj->pos.z;
+                f32 d2 = dx * dx + dy * dy + dz * dz;
+
+                if (h >= 1.0f && h < 1000.0f && d2 > (h * 2.5f) * (h * 2.5f)) {
+                    static s32 sFar;
+
+                    if (sFar < 40) {
+                        sFar++;
+                        Port_DiagNote("node far from its object, object used: node, distance x1000", node, (s32)(__builtin_sqrtf(d2) * 1000.0f));
+                        Port_DiagNote("node far from its object: object id, height x1000", objId, (s32)(h * 1000.0f));
+                    }
+                    Vec4_Copy(out, &obj->pos);
+                    out->y = obj->pos.y - h * 0.5f; /* y is up-negative */
+                }
+            }
+#endif
             return;
         }
 #ifdef PORT

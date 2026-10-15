@@ -1249,6 +1249,17 @@ void EftEmit_InitState(EftSet *set, EftSetState *st) {
 
 /* Counterpart of EftEmit_InitState: nothing to release. */
 void EftEmit_TermState(EftSet *set, EftSetState *st) {
+#ifdef PORT
+    /* fix75: every effect task (attacks, charges, auras: eft_h / i / j / k / l / o / p / q / r / v / ab) ends here. A sprite with no life
+       of its own (EftBill_Create with life <= 0) lives until its owner stops it and sits in the manager's list, not in the fighter's, so
+       when the owner's task dies without having stopped it nothing ever ends it: the glowing orbs that stay on the map until the battle is
+       over (before, only a transformation, which resets the fighter's effect tasks, removed them). The owner is gone here, so whatever is
+       still in its handles has no one left to stop it: EftEmit_KillAll (the same call EftVolley_Reset and the other Reset entries make; it
+       clears each handle, so a Reset followed by this Term does it once) ends them. */
+    if (set != NULL && st != NULL) {
+        EftEmit_KillAll(set, st);
+    }
+#endif
 }
 
 /* Flags for one emitter from the fighter's effect requests of this frame. */
