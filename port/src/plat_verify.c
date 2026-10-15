@@ -255,7 +255,9 @@ void Port_VerifyStart(void) {
         return;
     }
     once = 1;
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(__APPLE__)
+    /* iOS (fix67): the installer keeps the AFS archives whole, like Android's, so this check, which compares loose files,
+       reported "68601 missing, 0 changed" on a good install. Only on request there too. */
     /* Android: the app checks the disc image when it installs the game (the same checksums as the PC setup), and the
        archives are kept whole (layout "afs"), not as the loose files this compares: only on request. */
     if (v == NULL || atoi(v) == 0) {
