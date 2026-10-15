@@ -44,7 +44,7 @@
    other memory and every effect was "not in the bank's tables". A value that becomes a valid offset after taking the header
    away is that; anything else is already an offset and stays. */
 #ifdef __APPLE__
-/* _mh_execute_header viene de port_host.h (mach-o/ldsyms.h): no se vuelve a declarar */
+/* _mh_execute_header comes from port_host.h (mach-o/ldsyms.h): not declared again here */
 static uint32_t se_game_addr(uint32_t v) {
     uint32_t off = v - (uint32_t)PORT_BASE;
 

@@ -1,6 +1,10 @@
 #include "common.h"
 #include "battle/btl_char_cam_int.h"
 
+#ifdef PORT
+extern void Port_DiagNote(const char *what, long a, long b); /* bring-up (iOS): bt3_log.txt */
+#endif
+
 /* The fighter camera's cut evaluator, 0x1C4F68-0x1C5840: the middle of btl_char_cam.c, still a file of its own (see the
  * note at the top of btl_char_cam.c; the three can be merged now that it matches). It emits two .lit4 words, both 0.001f
  * (0x2FD08C, 0x2FD090). */
@@ -43,6 +47,19 @@ void ChrCam_CalcCut(ChrCamChr *chr, Vec4 *eye, Vec4 *rot, Vec4 *target) {
     if (cut->total > 0) {
         t = 1.0f - (f32)cut->timer / (f32)cut->total;
     }
+#ifdef PORT
+    {
+        static s32 sCuts; /* fix72: what each camera cut asks for (transformations, finishers), to find why it sits too close */
+
+        if (sCuts < 24 && cut->total > 0 && cut->timer == cut->total) {
+            sCuts++;
+            Port_DiagNote("camera cut: frames, flags", cut->total, cut->flags);
+            Port_DiagNote("camera cut: distance x1000, change x1000", (long)(cut->valC * 1000.0f), (long)(cut->valCDelta * 1000.0f));
+            Port_DiagNote("camera cut: eye node, look node", cut->unk88, cut->unk90);
+            Port_DiagNote("camera cut: fighter height x1000, object id", (long)(BtlCharApi_GetHeight(chr->objId) * 1000.0f), chr->objId);
+        }
+    }
+#endif
 
     node = cut->unk88;
     if (node >= 0) {
