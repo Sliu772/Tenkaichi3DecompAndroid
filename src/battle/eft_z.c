@@ -518,6 +518,23 @@ void EftBill_Update(EftZTask *task) {
     f32 r;
     f32 k;
 
+#ifdef PORT
+    /* An endless sprite (no life of its own) is ended only by the emitter that created it, through the handle it keeps in its
+       table. When that slot no longer names this task (the table was reset, reused or the emitter's task is gone) nobody can
+       stop it any more and it hangs where it was left: the glowing orbs scattered over the map. Such a sprite is ended here;
+       one that is already fading out ends by itself. */
+    if ((w->flags & EFT_BILL_NO_LIFE) && !(w->flags & EFT_BILL_ENDING) && w->ownerSlot != NULL && *w->ownerSlot != (void *)task) {
+        static s32 sOrphans;
+
+        if (sOrphans < 60) {
+            sOrphans++;
+            Port_DiagNote("effects: orphan sprite ended, owner object, count", w->arg.chr, sOrphans);
+        }
+        w->flags |= EFT_BILL_DEAD;
+        BtlTask_SetDead(task);
+        return;
+    }
+#endif
     if (!BtlScene_IsEffectStopped(w->arg.chr, w->type)) {
         if (w->delay <= 0.0f) {
             key = &w->key;
@@ -742,6 +759,15 @@ EftZTask *EftBill_Create(EftBillArg *arg) {
 
     return BtlTaskList_AddTail(gEftBillList, D_002C40F0, &a);
 }
+
+#ifdef PORT
+/* Records which slot of the emitter's handle table holds the sprite (called by EftEmit_SpawnType16 right after EftBill_Create). */
+void EftBill_SetOwnerSlot(EftZTask *task, void **slot) {
+    if (task != NULL && *task->cls == (void *)EftBill_Update) {
+        ((EftBill *)task->work)->ownerSlot = slot;
+    }
+}
+#endif
 
 /* The sprite's work when `task` is a live sprite task, else NULL. */
 static inline EftBill *EftBill_GetWork(EftZTask *task) {

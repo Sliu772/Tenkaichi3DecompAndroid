@@ -257,6 +257,10 @@ typedef struct EftPtclWork {
     /* 0x224 */ f32 roll;
     /* 0x228 */ u8 unk228[0x20];
     /* 0x248 */ u64 tex0;
+#ifdef PORT
+    /* port: the emitter's handle slot that holds this emitter (EftPtcl_SetOwnerSlot); outside the original layout */
+    void **ownerSlot;
+#endif
 } EftPtclWork; /* size 0x250 */
 
 /* gEftPtcl (0x50 bytes). */

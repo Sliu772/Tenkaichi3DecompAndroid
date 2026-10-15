@@ -1240,6 +1240,14 @@ void EftPtcl_Update(EftVTask *task) {
     EftPtclCur *cur = &w->cur;
     EftPtclDef *def = w->arg.def;
 
+#ifdef PORT
+    /* Same as EftBill_Update: an endless emitter whose handle slot no longer names it can never be stopped. */
+    if ((w->flags & EFT_PTCL_ENDLESS) && !(w->flags & EFT_PTCL_STOPPING) && w->ownerSlot != NULL && *w->ownerSlot != (void *)task) {
+        w->flags |= EFT_PTCL_DEAD;
+        BtlTask_SetDead(task);
+        return;
+    }
+#endif
     if (!BtlScene_IsEffectStopped(w->arg.objId, w->type)) {
         if (w->flags & EFT_PTCL_STOPPING) {
             if (w->stopDelay <= 0.0f) {
@@ -1364,6 +1372,15 @@ EftVTask *EftPtcl_Create(EftPtclArg *arg) {
 
     return BtlTaskList_AddTail(gEftPtclList, gEftPtclClass, &a);
 }
+
+#ifdef PORT
+/* Records which slot of the emitter's handle table holds this emitter (called by EftEmit_SpawnType5 after EftPtcl_Create). */
+void EftPtcl_SetOwnerSlot(EftVTask *task, void **slot) {
+    if (task != NULL && task->cls[0] == (void *)EftPtcl_Update) {
+        ((EftPtclWork *)task->work)->ownerSlot = slot;
+    }
+}
+#endif
 
 /* Stops the emission (after the stop delay, and with the linger time if one was set). */
 s32 EftPtcl_Stop(EftVTask *task) {

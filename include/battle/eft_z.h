@@ -140,6 +140,10 @@ typedef struct EftBill {
     /* 0x110 */ f32 fadeOutLen;
     /* 0x114 */ u8 unk114[0x24];
     /* 0x138 */ u64 tex;       /* TEX0, set by 0x195038 */
+#ifdef PORT
+    /* port: the emitter's handle slot that holds this sprite (EftBill_SetOwnerSlot); 0x140 on, outside the original layout */
+    void **ownerSlot;
+#endif
 } EftBill; /* size 0x140 */
 
 /* ---- ground dust ---------------------------------------------------------------------------------------- */

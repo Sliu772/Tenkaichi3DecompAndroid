@@ -1642,6 +1642,9 @@ void EftEmit_SpawnType2(EftSet *set, EftSetHandles *handles, s32 flags, s32 type
 }
 
 extern void *EftBill_Create(EftEmitArgA *arg);
+#ifdef PORT
+extern void EftBill_SetOwnerSlot(void *obj, void **slot);
+#endif
 extern s32 EftBill_Stop(void *obj);
 extern s32 EftBill_Kill(void *obj);
 extern s32 EftBill_SetPos(void *obj, Vec4 *pos);
@@ -1688,6 +1691,9 @@ void EftEmit_SpawnType16(EftSet *set, EftSetHandles *handles, s32 flags, s32 typ
                 }
                 Vec4_Copy((Vec4 *)&arg.dir, dir);
                 H(n) = EftBill_Create(&arg);
+#ifdef PORT
+                EftBill_SetOwnerSlot(H(n), &H(n));
+#endif
                 EftBill_SetDelay(H(n), part->unk5);
                 EftBill_SetEndDelay(H(n), part->unk6);
                 if (part->flags & 0x20) {
@@ -1952,6 +1958,9 @@ void EftEmit_SpawnType14(EftSet *set, EftSetHandles *handles, s32 flags, s32 typ
 }
 
 extern void *EftPtcl_Create(EftEmitArgA *arg);
+#ifdef PORT
+extern void EftPtcl_SetOwnerSlot(void *obj, void **slot);
+#endif
 extern s32 EftPtcl_Stop(void *obj);
 extern s32 EftPtcl_Kill(void *obj);
 extern s32 EftPtcl_SetPos(void *obj, Vec4 *pos);
@@ -1995,6 +2004,9 @@ void EftEmit_SpawnType5(EftSet *set, EftSetHandles *handles, s32 flags, s32 type
                 }
                 Vec4_Copy((Vec4 *)&arg.dir, dir);
                 H(n) = EftPtcl_Create(&arg);
+#ifdef PORT
+                EftPtcl_SetOwnerSlot(H(n), &H(n));
+#endif
                 EftPtcl_SetStartDelay(H(n), part->unk5);
                 EftPtcl_SetStopDelay(H(n), part->unk6);
                 EftPtcl_SetLinger(H(n), part->unk7);
