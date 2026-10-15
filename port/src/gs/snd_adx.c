@@ -112,20 +112,30 @@ extern int Port_FilePath(int ptid, int flid, const char *fname, char *out, int s
 static uint32_t be32(const uint8_t *p) { return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3]; }
 static uint32_t be16(const uint8_t *p) { return (uint32_t)p[0] << 8 | p[1]; }
 
+static int sNextTry, sTries;
+
 static int device(void) {
     /* not before the renderer has decided whether there is a window (its first frame) */
-    if (!sTried && (GsGpu_Enabled() || getenv("BT3_SOUND") != NULL || gGsFrame > 2)) {
+    if (sDevice == 0 && (!sTried || (sTries < 40 && (int)gGsFrame >= sNextTry)) && (GsGpu_Enabled() || getenv("BT3_SOUND") != NULL || gGsFrame > 2)) {
         sTried = 1;
         /* BT3_SOUND=1: sound without a window too (tests, with SDL_AUDIO_DRIVER=dummy for silence) */
-        if ((GsGpu_Enabled() || getenv("BT3_SOUND") != NULL) && getenv("BT3_NOSOUND") == NULL && SDL_InitSubSystem(SDL_INIT_AUDIO)) {
-            sDevice = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
-            if (sDevice == 0) {
-                fprintf(stderr, "bt3: no sound device: %s\n", SDL_GetError());
+        if ((GsGpu_Enabled() || getenv("BT3_SOUND") != NULL) && getenv("BT3_NOSOUND") == NULL) {
+            /* iOS: the audio session can fail to activate while the app is still becoming active (error '!pri'),
+               so it asks for the playback category and tries again every 120 frames instead of giving up for good */
+            SDL_SetHint("SDL_AUDIO_CATEGORY", "playback");
+            if (SDL_InitSubSystem(SDL_INIT_AUDIO)) {
+                sDevice = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
+                if (sDevice == 0) {
+                    fprintf(stderr, "bt3: no sound device (try %d): %s\n", sTries + 1, SDL_GetError());
+                    SDL_QuitSubSystem(SDL_INIT_AUDIO);
+                }
+                else {
+                    SDL_ResumeAudioDevice(sDevice);
+                    fprintf(stderr, "bt3: sound: %s (try %d)\n", SDL_GetCurrentAudioDriver(), sTries + 1);
+                }
             }
-            else {
-                SDL_ResumeAudioDevice(sDevice);
-                fprintf(stderr, "bt3: sound: %s\n", SDL_GetCurrentAudioDriver());
-            }
+            sTries++;
+            sNextTry = (int)gGsFrame + 120;
         }
     }
     return sDevice != 0;

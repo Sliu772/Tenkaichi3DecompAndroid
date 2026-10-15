@@ -181,6 +181,16 @@ static uint32_t clut_hash(uint32_t cbp, uint32_t cpsm, uint32_t count) {
 
 /* GS memory -> an RGBA texture for the current TEX0 (alpha as stored: 0x80 is opaque). The back end makes
    the texture and takes the decoded pixels (freed after it has uploaded them). */
+/* bring-up (iOS): why a draw would show the white texture or a flat colour, in the log (first 80 only) */
+static void tex_diag(const char *why, uint64_t t0, uint32_t c) {
+    static unsigned n;
+    if (n < 80) {
+        n++;
+        fprintf(stderr, "bt3 texdiag: frame %u %s: tex0 %016llx tbp %u psm %u size %ux%u cbp %u color %08x\n", gGsFrame, why, (unsigned long long)t0,
+                (unsigned)(t0 & 0x3FFF), (unsigned)((t0 >> 20) & 0x3F), 1u << ((t0 >> 26) & 15), 1u << ((t0 >> 30) & 15), (unsigned)((t0 >> 37) & 0x3FFF), c);
+    }
+}
+
 static GsTex texture_get(int ctx) {
     uint64_t t0 = gGs.tex0[ctx] & 0x1FFFFFFFFFFFFFFFull, texa = gGs.texa;
     uint32_t tbp = t0 & 0x3FFF, tbw = (t0 >> 14) & 0x3F, psm = (t0 >> 20) & 0x3F, tw = 1u << ((t0 >> 26) & 15), th = 1u << ((t0 >> 30) & 15);
@@ -223,6 +233,7 @@ static GsTex texture_get(int ctx) {
         }
     }
     if (sBackend->texSlotsLeft() <= 0) {
+        tex_diag("no texture slots left, white", t0, 0);
         return gsWhite;
     }
     if (gsTexCount >= TEX_CAP || sTexBytes > TEX_BYTES_CAP) {
@@ -251,6 +262,7 @@ static GsTex texture_get(int ctx) {
             sTexBucket[h] = (uint16_t)(i + 1);
         }
         if (gsTexCount >= TEX_CAP) {
+            tex_diag("texture cache full, white", t0, 0);
             return gsWhite; /* this one frame uses more textures than the cache holds */
         }
     }
@@ -303,6 +315,18 @@ static GsTex texture_get(int ctx) {
             px[y * tw + x] = c;
         }
     }
+    if (px != NULL) { /* a texture of one colour only: a page of GS memory that was never written, or a decode that went wrong */
+        uint32_t k, same = 1;
+        for (k = 1; k < tw * th; k++) {
+            if (px[k] != px[0]) {
+                same = 0;
+                break;
+            }
+        }
+        if (same) {
+            tex_diag("uniform texture", t0, px[0]);
+        }
+    }
     gGpuTexNs += gpu_now() - tex_t0;
     t = &sTex[gsTexCount];
     t->tex = replaced ? sBackend->texCreate(rw, rh, packFormat, pack.levels) : sBackend->texCreate(tw, th, GS_TEXFMT_RGBA8, 1);
@@ -311,6 +335,7 @@ static GsTex texture_get(int ctx) {
         if (replaced) {
             TexPack_Free(&pack);
         }
+        tex_diag("texCreate failed, white", t0, 0);
         return gsWhite;
     }
     if (replaced) {

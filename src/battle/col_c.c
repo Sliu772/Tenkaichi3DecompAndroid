@@ -120,6 +120,7 @@ extern void Port_DiagBlock(const char *what, const void *p, u32 bytes);
 #define FONT_STR_SLOTS 256
 static void *sFontStr[FONT_STR_SLOTS];
 static void *sFontPendingStr;
+static s32 sFontDiagDrawn, sFontDiagMissed; /* glyph sprites drawn / characters with no glyph since the last flush */
 #endif
 
 extern FontCursor gFontCursor; /* 0x31C1C0 */
@@ -366,6 +367,26 @@ void Font_Flush(s32 first) {
             Font_CloseSpriteTag(&pkt, &tag);
         }
         Font_EndPacket(&pkt);
+#ifdef PORT
+        {
+            static s32 sLastCmds = -1, sLastDrawn = -1, sLastMissed = -1, sDiagN;
+
+            /* bring-up (iOS): every flush whose numbers differ from the last one logged (the dialog's flush shows here) */
+            if (sDiagN < 300 && (gFontCmdCount != sLastCmds || sFontDiagDrawn != sLastDrawn || sFontDiagMissed != sLastMissed)) {
+                sDiagN++;
+                sLastCmds = gFontCmdCount;
+                sLastDrawn = sFontDiagDrawn;
+                sLastMissed = sFontDiagMissed;
+                Port_DiagNote("fontdiag flush: commands, glyph sprites drawn", gFontCmdCount - first, sFontDiagDrawn);
+                Port_DiagNote("fontdiag flush: characters with no glyph, first kind", sFontDiagMissed, gFontCmds[first].kind);
+                Port_DiagNote("fontdiag flush: first x, y", gFontCmds[first].x, gFontCmds[first].y);
+                Port_DiagNote("fontdiag flush: first color, clip x0", (s32)gFontCmds[first].color, gFontCmds[first].clipX0);
+                Port_DiagNote("fontdiag flush: clip y0, clip x1", gFontCmds[first].clipY0, gFontCmds[first].clipX1);
+            }
+            sFontDiagDrawn = 0;
+            sFontDiagMissed = 0;
+        }
+#endif
         Font_Home();
         Font_SetCmdCount(first);
     }
@@ -1215,6 +1236,7 @@ s32 Font_DrawGlyph(u64 **pkt, FontCmd *cmd, s32 x, s32 y, u16 ch) {
     {
         static s32 sMissLog, sHitLog;
 
+        if (glyph == NULL) { sFontDiagMissed++; } else { sFontDiagDrawn++; }
         if (glyph == NULL && sMissLog < 8) { /* bring-up (iOS) */
             sMissLog++;
             Port_DiagNote("font: glyph not found, code", ch, gFontSlots[0].data != NULL ? gFontSlots[0].data->glyphCount : -1);
