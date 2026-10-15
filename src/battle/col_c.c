@@ -121,8 +121,24 @@ extern void TexFile_UploadAll(void *res, void *tex, void *tex2);
 extern void Port_DiagNote(const char *what, long a, long b);
 extern void Port_DiagBlock(const char *what, const void *p, u32 bytes);
 #define FONT_STR_SLOTS 256
-static void *sFontStr[FONT_STR_SLOTS];
-static void *sFontPendingStr;
+/* fix60 (iOS, logs 92/93): the string pointer was kept in a game-side `void *`, i.e. a 4-byte field. A pointer PARAMETER stored
+   into one goes in as offset + ASLR slide (the same fault as BtlTaskList_Create's parent in eft_ae.c): the title was at
+   06259720 when queued and the flush read 08f69720, the difference being the slide of that run (0x2D10000). The flush read
+   zeros, so not one glyph was drawn. On iOS the reference is now a 4-byte OFFSET written and read by host code
+   (Port_StorePtr32 / Port_LoadPtr32, port/src/plat_ios.c); elsewhere it stays the plain pointer. */
+#ifdef __APPLE__
+extern void Port_StorePtr32(void *field, const void *p);
+extern void *Port_LoadPtr32(const void *field);
+typedef u32 FontStrRef;
+#define FONT_STR_STORE(ref, p) Port_StorePtr32(&(ref), (p))
+#define FONT_STR_LOAD(ref) Port_LoadPtr32(&(ref))
+#else
+typedef void *FontStrRef;
+#define FONT_STR_STORE(ref, p) ((ref) = (p))
+#define FONT_STR_LOAD(ref) (ref)
+#endif
+static FontStrRef sFontStr[FONT_STR_SLOTS];
+static FontStrRef sFontPendingStr;
 static s32 sFontDiagDrawn, sFontDiagMissed; /* glyph sprites drawn / characters with no glyph since the last flush */
 #endif
 
@@ -174,8 +190,8 @@ s32 Font_DrawGlyph(u64 **pkt, FontCmd *cmd, s32 x, s32 y, u16 ch);
 static void *Font_CmdString(FontCmd *cmd) {
     s32 idx = (s32)(cmd - gFontCmds);
 
-    if (idx >= 0 && idx < FONT_STR_SLOTS && sFontStr[idx] != NULL) {
-        return sFontStr[idx];
+    if (idx >= 0 && idx < FONT_STR_SLOTS && sFontStr[idx] != 0) {
+        return FONT_STR_LOAD(sFontStr[idx]);
     }
     return (void *)cmd->arg;
 }
@@ -536,7 +552,7 @@ FontCmd *Font_AddCmdAt(s32 x, s32 y, s32 arg, s32 digits, s32 kind) {
 /* Prints a 16-bit string at the cursor. */
 void Font_Print(u16 *str) {
 #ifdef PORT
-    sFontPendingStr = str;
+    FONT_STR_STORE(sFontPendingStr, str);
 #endif
     Font_AddCmd((s32)str, 0, FONT_CMD_STR16);
 }
@@ -544,7 +560,7 @@ void Font_Print(u16 *str) {
 /* Prints a 16-bit string at a position. */
 void Font_PrintAt(s32 x, s32 y, u16 *str) {
 #ifdef PORT
-    sFontPendingStr = str;
+    FONT_STR_STORE(sFontPendingStr, str);
 #endif
     Font_AddCmdAt(x, y, (s32)str, 0, FONT_CMD_STR16);
 }
@@ -562,7 +578,7 @@ void Font_PutCharAt(s32 x, s32 y, u16 ch) {
 /* Prints an 8-bit string at the cursor. */
 void Font_PrintAscii(char *str) {
 #ifdef PORT
-    sFontPendingStr = str;
+    FONT_STR_STORE(sFontPendingStr, str);
 #endif
     Font_AddCmd((s32)str, 0, FONT_CMD_STR8);
 }
@@ -570,7 +586,7 @@ void Font_PrintAscii(char *str) {
 /* Prints an 8-bit string at a position. */
 void Font_PrintAsciiAt(s32 x, s32 y, char *str) {
 #ifdef PORT
-    sFontPendingStr = str;
+    FONT_STR_STORE(sFontPendingStr, str);
 #endif
     Font_AddCmdAt(x, y, (s32)str, 0, FONT_CMD_STR8);
 }
@@ -842,7 +858,7 @@ void Font_DrawCmd(u64 **pkt, FontCmd *cmd) {
 
                 if (sCmdLog < 40) { /* bring-up (iOS): what the printer reads from the string it is about to draw */
                     sCmdLog++;
-                    Port_DiagNote("fontdiag cmd: first char, string set (0 = no)", str != NULL ? (s32)*(u16 *)str : -1, (s32)(cmd - gFontCmds) < FONT_STR_SLOTS ? sFontStr[cmd - gFontCmds] != NULL : -2);
+                    Port_DiagNote("fontdiag cmd: first char, string set (0 = no)", str != NULL ? (s32)*(u16 *)str : -1, (s32)(cmd - gFontCmds) < FONT_STR_SLOTS ? sFontStr[cmd - gFontCmds] != 0 : -2);
                     Port_DiagNote("fontdiag cmd: align, has tag callback", cmd->align, cmd->tag != NULL);
                     Port_DiagNote("fontdiag cmd: scaleX*1000, x before align", (s32)(cmd->scaleX * 1000.0f), x);
                 }
@@ -1175,9 +1191,9 @@ FontCmd *Font_NewCmd(s32 arg, s32 digits, s32 x, s32 y, s32 homeX, s32 kind) {
         s32 idx = gFontCmdCount - 1;
 
         if (idx >= 0 && idx < FONT_STR_SLOTS) {
-            sFontStr[idx] = (kind == FONT_CMD_STR16 || kind == FONT_CMD_STR8) ? sFontPendingStr : NULL;
+            sFontStr[idx] = (kind == FONT_CMD_STR16 || kind == FONT_CMD_STR8) ? sFontPendingStr : 0;
         }
-        sFontPendingStr = NULL;
+        sFontPendingStr = 0;
     }
 #endif
     return cmd;
