@@ -1138,6 +1138,7 @@ void EftKiBlast_Init(EftRTask *task, EftRArg *arg) {
     EftRMgr *mgr = BtlTask_GetParent(task)->work;
     EftKiBlast *w = task->work;
     EftRSet *set = &mgr->set->set;
+    s32 spawnNode = arg->node;
 
     memset(w, 0, sizeof(EftKiBlast));
     w->arg = *arg;
@@ -1145,8 +1146,15 @@ void EftKiBlast_Init(EftRTask *task, EftRArg *arg) {
     if (arg->type != 0) {
         w->flags |= EFT_KIBLAST_TYPED;
     }
-    BtlCharApi_GetNodePos(arg->objId, arg->node, &w->pose.start);
-    BtlCharApi_GetNodePos(arg->objId, arg->node, &w->pose.pos);
+    
+    // Validación de rango para asegurar que use un nodo de mano válido (0x12 a 0x2D) en lugar de la raíz (0)
+    if (spawnNode < 0x12 || spawnNode > 0x2D) {
+        spawnNode = 0x20; // Nodo por defecto para la mano si el argumento es inválido
+        w->arg.node = (s16)spawnNode;
+    }
+
+    BtlCharApi_GetNodePos(arg->objId, spawnNode, &w->pose.start);
+    BtlCharApi_GetNodePos(arg->objId, spawnNode, &w->pose.pos);
     BtlCharApi_GetNodePos(arg->objId, 0x11, &w->pose.prev);
     Vec4_Copy(&w->pose.dir, &arg->dir);
     w->radius = arg->radius;
@@ -1160,7 +1168,7 @@ void EftKiBlast_Init(EftRTask *task, EftRArg *arg) {
     }
     EftEmit_InitState(w->set, &w->state);
     w->mask |= 2;
-    EftEmit_SetNode(&w->nodes, 1, arg->node, NULL);
+    EftEmit_SetNode(&w->nodes, 1, spawnNode, NULL);
     EftEmit_RefreshFixedNodes(arg->objId, &w->nodes);
     w->endFrames = EftEmit_GetEndFrames(w->set);
     if (BtlCharApi_IsLockedOn(arg->objId)) {
