@@ -100,7 +100,7 @@ static PortFile *open_rel(const char *rel) {
     if (size < 0) {
         return NULL;
     }
-    if (sDiagN < 400) {
+    if (sDiagN < 1500) {
         sDiagN++;
         fprintf(stderr, "bt3 open: %s size %ld\n", rel, size);
     }
@@ -262,7 +262,7 @@ int ADXF_ReadNw(void *h, int nsct, void *buf) {
         nsct = f->sizeSct - f->posSct;
     }
     got = Port_FileReadAt(f->rel, (long)f->posSct * SECTOR, buf, (size_t)nsct * SECTOR);
-    if (sDiagN < 400 && nsct > 0) {
+    if (sDiagN < 1500 && nsct > 0) {
         const uint8_t *b = (const uint8_t *)buf;
         sDiagN++;
         fprintf(stderr, "bt3 read: %s pos %d nsct %d got %lu buf %08x head %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x\n", f->rel, (int)f->posSct, nsct,
@@ -337,6 +337,13 @@ void Port_DiagNote(const char *what, long a, long b) {
 
     /* the camera cuts have a budget of their own: the bpe notes of the loads used the whole one before the first
        transformation, and the log had no camera lines to find why a cut sits too close */
+    if ((what[0] == 'p' && what[1] == 'o' && what[2] == 'o') || (what[0] == 'd' && what[1] == 'm' && what[2] == 'a')) { /* pool / dma: their own budget */
+        static int sPoolLines;
+        if (sPoolLines++ < 120) {
+            fprintf(stderr, "bt3 diag: %s %ld %ld\n", what, a, b);
+        }
+        return;
+    }
     if (what[0] == 'c' && what[1] == 'a' && what[2] == 'm') {
         if (sCamLines++ < 200) {
             fprintf(stderr, "bt3 diag: %s %ld %ld\n", what, a, b);

@@ -12,6 +12,13 @@ extern s32 gBtlPoolInitArg;
  * the compiler reloads gBtlPool, which a direct `gBtlPool->arenaMem = x` does not reproduce. */
 #define ARENA_MEM (*&gBtlPool->arenaMem)
 
+#ifdef PORT
+extern void Port_DiagNote(const char *what, long a, long b);
+#define POOL_EXTRA_MAX 256
+static void *sPoolExtra[BTL_POOL_SLOT_COUNT][POOL_EXTRA_MAX]; /* heap blocks that stood in for an arena that was full */
+static s32 sPoolExtraN[BTL_POOL_SLOT_COUNT];
+#endif
+
 s32 BtlPool_CalcArenaSize(void);
 void BtlPool_CarveArenas(void);
 u8 *BtlPool_InitSlot(BtlPoolSlot *slot, s32 size, u8 *mem);
@@ -51,6 +58,23 @@ void *BtlPool_Alloc(s32 slot, s32 size) {
     void *ptr;
 
     if (gBtlPool->arenaMask & BTL_POOL_ARENA_BIT(slot)) {
+#ifdef PORT
+        /* An arena has no capacity check in the original: past its end the bump pointer runs into the next arena and then
+           into whatever follows the block in the heap (display lists, file buffers). Here an allocation that does not fit
+           comes from the heap instead (freed by BtlPool_Reset) and the first overflows are logged. */
+        if (s->base != NULL && (s32)(s->cur - s->base) + aligned > s->size) {
+            void *extra = Heap_Alloc(size, 0x20, 0, HEAP_ANY);
+            Port_DiagNote("pool: arena overflow, slot*1000+size/32", (long)slot * 1000 + aligned / 32, (long)s->used);
+            if (extra != NULL) {
+                memset(extra, 0, size);
+                if (sPoolExtraN[slot] < POOL_EXTRA_MAX) {
+                    sPoolExtra[slot][sPoolExtraN[slot]++] = extra;
+                }
+            }
+            s->used += aligned;
+            return extra;
+        }
+#endif
         ptr = s->cur;
         s->cur += aligned;
         s->used += aligned;
@@ -75,6 +99,15 @@ void BtlPool_Reset(s32 slot) {
     BtlPoolSlot *s = &gBtlPool->slots[slot];
 
     if (gBtlPool->arenaMask & BTL_POOL_ARENA_BIT(slot)) {
+#ifdef PORT
+        {
+            s32 i;
+            for (i = 0; i < sPoolExtraN[slot]; i++) {
+                Heap_Free(sPoolExtra[slot][i]);
+            }
+            sPoolExtraN[slot] = 0;
+        }
+#endif
         s->cur = s->base;
         s->used = 0;
     }

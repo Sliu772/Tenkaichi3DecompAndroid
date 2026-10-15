@@ -17,6 +17,19 @@ extern s32 gDmaBufIdx;
 extern u32 *gDmaCur;
 extern s32 gDmaVif1Started;
 
+#ifdef PORT
+extern void Port_DiagNote(const char *what, long a, long b);
+#define DMA_TAIL_RESERVE 0x100 /* always left free so that Dma_Flush can close the list */
+static u32 sDmaScratch[0x8000]; /* 128 KB: where a packet goes that no longer fits in the list */
+/* 1 = `size` more bytes fit in the current list (keeping room for the closing packet). */
+static int Dma_Fits(u32 size) {
+    return (u32)gDmaCur + size + DMA_TAIL_RESERVE <= gDmaBufEnd[gDmaBufIdx];
+}
+static void Dma_NoteFull(const char *what, u32 size) {
+    Port_DiagNote(what, (long)((u32)gDmaCur - gDmaBuf[gDmaBufIdx]), (long)size);
+}
+#endif
+
 /* Allocates the two 1 MB display-list buffers and points the write cursor at the first. */
 void Dma_InitBuffers(void) {
     gDmaBuf[0] = (u32)Heap_Alloc(DMA_BUF_SIZE, 0x20, 0, HEAP_ANY);
@@ -31,7 +44,8 @@ void Dma_InitBuffers(void) {
 /* Copies `size` bytes (whole quadwords) of ready-made packet data to the display list. */
 void Dma_AddData(void *src, s32 size) {
 #ifdef PORT
-    if ((u32)gDmaCur + (u32)size > gDmaBufEnd[gDmaBufIdx]) { /* the list is full: the rest of the frame is left out, never written past the buffer */
+    if (!Dma_Fits((u32)size)) { /* the list is full: the rest of the frame is left out, never written past the buffer */
+        Dma_NoteFull("dma: list full in AddData, used/size", (u32)size);
         return;
     }
 #endif
@@ -44,7 +58,8 @@ void Dma_AddRef(void *addr, s32 size) {
     u32 *tag = gDmaCur;
 
 #ifdef PORT
-    if ((u32)tag + 16 > gDmaBufEnd[gDmaBufIdx]) {
+    if (!Dma_Fits(16)) {
+        Dma_NoteFull("dma: list full in AddRef, used/size", 16);
         return;
     }
 #endif
@@ -61,6 +76,13 @@ void Dma_AddRef(void *addr, s32 size) {
 void Dma_AddNext(void *addr, u32 *retTag) {
     u32 *tag = gDmaCur;
 
+#ifdef PORT
+    if (!Dma_Fits(16)) {
+        Dma_NoteFull("dma: list full in AddNext, used/size", 16);
+        retTag[1] = (u32)tag; /* nothing follows: the return tag points at the cursor */
+        return;
+    }
+#endif
     tag[0] = DMA_TAG_NEXT;
     tag[1] = DMA_TAG_ADDR(addr);
     tag[2] = 0;
@@ -98,6 +120,16 @@ void Dma_Flush(void) {
 void *Dma_Alloc(s32 size) {
     u32 *p = gDmaCur;
 
+#ifdef PORT
+    if (size < 0 || !Dma_Fits((u32)size)) { /* the packet is written, but into scratch memory: it is not in the list */
+        Dma_NoteFull("dma: list full in Alloc, used/size", (u32)size);
+        if ((u32)size > sizeof(sDmaScratch)) {
+            size = (s32)sizeof(sDmaScratch);
+        }
+        return sDmaScratch;
+    }
+#endif
+
     gDmaCur = (u32 *)((u8 *)gDmaCur + size / 16 * 16);
     return p;
 }
@@ -105,6 +137,13 @@ void *Dma_Alloc(s32 size) {
 /* Starts a GS packet: clears the quadword that will hold its DMA tag and returns the first data quadword. */
 u64 *Dma_BeginDirect(void) {
     u128 *tag = (u128 *)gDmaCur;
+
+#ifdef PORT
+    if (!Dma_Fits(0x2000)) { /* a direct packet is built in place: if it might not fit it is built in scratch memory */
+        Dma_NoteFull("dma: list full in BeginDirect, used/size", 0x2000);
+        tag = (u128 *)sDmaScratch;
+    }
+#endif
 
 #ifdef PORT
     tag->lo = 0;
@@ -119,6 +158,12 @@ u64 *Dma_BeginDirect(void) {
 void Dma_EndDirect(u64 *end) {
     u32 *tag = gDmaCur;
     s32 qwc;
+
+#ifdef PORT
+    if ((u32 *)end > sDmaScratch && (u32 *)end <= sDmaScratch + 0x8000) { /* built in scratch memory (BeginDirect): not added */
+        return;
+    }
+#endif
 
     if ((u32 *)end != tag + 4) {
         qwc = (((u8 *)end - (u8 *)tag) >> 4) - 1;
