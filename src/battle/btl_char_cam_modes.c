@@ -870,7 +870,7 @@ void ChrCam_StartCut(ChrCamChr *chr) {
        left as the character's table asks. A cut that starts while the model is rebuilt (the height reads 0 or
        nonsense) floors against a typical body height instead, so the shot cannot collapse onto the node either. */
     {
-        f32 floorDist = ((scale >= 1.0f && scale < 1000.0f) ? scale : 15.0f) * 2.5f; /* fix75: 2.5 body heights, was 1 */
+        f32 floorDist = ((scale >= 1.0f && scale < 1000.0f) ? scale : 15.0f) * ((def->cutFlags == 113 || def->cutFlags == 220 || def->cutFlags == 248) ? 1.0f : 1.8f); /* fix76: transformation cuts (flags 113 / 220 / 248 in the log) keep 1 body height, every other cut 1.8 */
         f32 endDist = valC + valCDelta;
 
         if (valC < floorDist) {

@@ -536,6 +536,19 @@ void EftBill_Update(EftZTask *task) {
     }
 #endif
 #ifdef PORT
+    /* fix77: an endless sprite its owner was moving every frame and no longer moves is one the owner let go of (the emitter
+       stopped driving it without ending it): ended after 60 frames of not being moved, whatever the distance. */
+    if ((w->flags & EFT_BILL_NO_LIFE) && !(w->flags & EFT_BILL_ENDING) && w->driven) {
+        if (!BtlScene_IsEffectStopped(w->arg.chr, w->type)) {
+            w->idle++;
+        }
+        if (w->idle > 60) {
+            w->flags |= EFT_BILL_DEAD;
+            BtlTask_SetDead(task);
+            return;
+        }
+    }
+
     /* fix75: an endless sprite far from both fighters is a stray orb: ended. */
     if ((w->flags & EFT_BILL_NO_LIFE) && !(w->flags & EFT_BILL_ENDING)) {
         extern f32 BtlCharApi_GetHeight(s32 objId);
@@ -906,6 +919,10 @@ s32 EftBill_SetPos(EftZTask *task, Vec4 *pos) {
         return 0;
     }
     Vec3_Copy(V(&w->arg.pos), pos);
+#ifdef PORT
+    w->driven = 1;
+    w->idle = 0;
+#endif
     return 1;
 }
 

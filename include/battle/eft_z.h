@@ -143,6 +143,8 @@ typedef struct EftBill {
 #ifdef PORT
     /* port: the emitter's handle slot that holds this sprite (EftBill_SetOwnerSlot); 0x140 on, outside the original layout */
     void **ownerSlot;
+    s32 driven; /* fix77: SetPos calls seen */
+    s32 idle;   /* fix77: frames since the last SetPos */
 #endif
 } EftBill; /* size 0x140 */
 
