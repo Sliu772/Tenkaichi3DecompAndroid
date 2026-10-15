@@ -369,12 +369,6 @@ void EftShot_DestroyChar(s32 chr) {
     if (c->task != NULL) {
         BtlScene_Reset(chr == 0 ? 2 : 3);
         EftShot_SetCharPool(chr);
-#ifdef PORT
-        {
-            extern s32 BtlTaskList_KillInPool(s32 slot, void *skip);
-            BtlTaskList_KillInPool(chr == 0 ? 4 : 5, c->task);
-        }
-#endif
         BtlTask_Kill(c->task);
         c->task = NULL;
     }

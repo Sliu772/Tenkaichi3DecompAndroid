@@ -1611,7 +1611,6 @@ void BtlTask_SetPos(BtlTask *task, EftAeVec pos) {
 
 #ifdef PORT
 extern int BtlPool_Contains(s32 slot, const void *p); /* btl_pool.c */
-static s32 sSweepKilled;
 extern void Port_DiagNote(const char *what, long a, long b);
 
 /* Which battle pool (0..8) holds `p`, -1 for none. */
@@ -1625,58 +1624,41 @@ static s32 EftDiag_PoolOf(const void *p) {
     }
     return -1;
 }
-BtlTask *BtlTask_GetParent(BtlTask *task);
 
-/* 1 when `cur` is `task` or lies inside its child lists: such a task is running now and must not be removed from under itself. */
-static s32 BtlTask_IsRunningIn(BtlTask *task, BtlTask *cur) {
-    s32 depth = 0;
+/* A texture entry copied by an effect object (emitter, ribbon: it keeps `tbl[i]`, a pointer into the texture pack that was
+   loaded with it) outlives its pack when the fighter's model is replaced: the pack's memory is freed and reused by the
+   next model's files, the record it points to is then other data (image sizes of 1.5e9 in the log, texture entries 26 / 27
+   of pool 1 every frame from the end of the transformation) and every frame the upload names a REF that cannot exist.
+   Such an entry is not given VRAM; if the object that owns the copy is the task being updated (the copy lies in its
+   work block) that task is ended, as it would have been when its owner's layer died. */
+static s32 EftTex_Damaged(EftAeTex *tex) {
+    u8 *im = (u8 *)tex->image;
+    s32 imageSize;
+    s32 clutSize;
 
-    while (cur != NULL && depth++ < 16) {
-        if (cur == task) {
-            return 1;
-        }
-        cur = BtlTask_GetParent(cur);
+    if (im == NULL) {
+        return 1;
+    }
+    imageSize = *(s32 *)(im + 0x8);
+    clutSize = *(s32 *)(im + 0xC);
+    return imageSize < 0 || imageSize > 0x800000 || (imageSize & 15) != 0 || clutSize < 0 || clutSize > 0x800000 || (clutSize & 15) != 0;
+}
+
+static u64 EftTex_Orphan(EftAeTex *tex) {
+    static s32 sShown;
+    s32 owned = 0;
+
+    if (gBtlTaskCur != NULL && gBtlTaskCur->work != NULL && (u8 *)tex >= (u8 *)gBtlTaskCur->work &&
+        (u8 *)tex < (u8 *)gBtlTaskCur->work + 0x4000) {
+        BtlTask_SetDead(gBtlTaskCur);
+        owned = 1;
+    }
+    if (sShown < 40) {
+        sShown++;
+        Port_DiagNote("effects: damaged texture entry, owner task ended (1/0), class offset", (long)owned,
+                      owned ? (long)((u8 *)gBtlTaskCur->cls - (u8 *)&BtlTask_Kill) : -1L);
     }
     return 0;
-}
-
-static void BtlTaskList_SweepPool(BtlTaskList *list, s32 slot, BtlTask *skip) {
-    BtlTask *task = list->head;
-    BtlTask *next;
-
-    while (task != NULL) {
-        next = task->next;
-        if (task != skip && !BtlTask_IsRunningIn(task, gBtlTaskCur)) {
-            if (BtlPool_Contains(slot, task->work) || BtlPool_Contains(slot, task)) {
-                {
-                    static s32 sShown;
-
-                    if (sShown < 40) { /* class: offset from BtlTask_Kill (find the table in the link map); tag: owner bits, 0x800 / 0x1000 are reached by BtlScene_Reset */
-                        sShown++;
-                        Port_DiagNote("effects: orphan task killed, class offset, tag", (long)((u8 *)task->cls - (u8 *)&BtlTask_Kill), (long)task->tag);
-                    }
-                }
-                BtlTask_Kill(task); /* at once, term callback included, while its memory is intact: a deferred kill ran one more update first */
-                sSweepKilled++;
-            } else if (task->child != NULL) {
-                BtlTaskList_SweepPool(task->child, slot, skip);
-            }
-        }
-        task = next;
-    }
-}
-
-/* A fighter's effect layer is torn down when its model is replaced and its pool (slot 4/5 shots, 7/8 effects) is rewound.
-   Tasks of that fighter that BtlScene_Reset did not reach (groups 2 and 5 are never owner-tagged) kept running with their
-   data inside the rewound pool: stuck ki / special-attack particles over the map, and texture entries with overwritten
-   pointers. Every task of the pool outside `skip` (the layer's own task, killed by the caller) is removed here. */
-s32 BtlTaskList_KillInPool(s32 slot, void *skipArg) {
-    sSweepKilled = 0;
-    if (gBtlTaskRoot != NULL) {
-        BtlTaskList_SweepPool(gBtlTaskRoot, slot, skipArg);
-    }
-    Port_DiagNote("effects: layer torn down, pool slot, orphan tasks killed", slot, sSweepKilled);
-    return sSweepKilled;
 }
 #endif
 
@@ -1745,6 +1727,12 @@ u64 EftVram_AddTex(EftAeTex *tex, s32 tcc, s32 tfx) {
     EftAeVramEntry *e = &gEftVram->entry[gEftVram->count];
     u64 tex0;
 
+#ifdef PORT
+    if (EftTex_Damaged(tex)) {
+        return EftTex_Orphan(tex);
+    }
+#endif
+
     e->tex = tex;
     e->imageBlock = gEftVram->imageNext;
     e->clutBlock = gEftVram->clutNext;
@@ -1763,6 +1751,12 @@ u64 EftVram_AddImage(EftAeTex *tex, s32 tcc, s32 tfx) {
     EftAeVramEntry *e = &gEftVram->entry[gEftVram->count];
     u64 tex0;
 
+#ifdef PORT
+    if (EftTex_Damaged(tex)) {
+        return EftTex_Orphan(tex);
+    }
+#endif
+
     e->tex = tex;
     e->imageBlock = gEftVram->imageNext;
     e->flags = 1;
@@ -1778,6 +1772,12 @@ u64 EftVram_AddImage(EftAeTex *tex, s32 tcc, s32 tfx) {
 u64 EftVram_AddClut(EftAeTex *tex) {
     EftAeVramEntry *e = &gEftVram->entry[gEftVram->count];
     u64 block;
+
+#ifdef PORT
+    if (EftTex_Damaged(tex)) {
+        return EftTex_Orphan(tex);
+    }
+#endif
 
     e->tex = tex;
     e->imageBlock = 0;
@@ -1856,16 +1856,26 @@ void EftVram_UploadAll(void) {
 #ifdef PORT
         {
             extern unsigned gDmaBadRefs; /* dma.c */
+            extern int Port_RefOk(const void *p, int size); /* plat_stub.c */
             unsigned before = gDmaBadRefs;
 
             EftVram_Upload(e->tex, imageBlock, clutBlock);
             if (gDmaBadRefs != before) { /* this entry's pixels / CLUT were named by a REF that cannot exist */
                 static s32 sBadTex;
 
-                if (sBadTex++ < 16) {
+                if (sBadTex++ < 6) {
+                    const u32 *w = (const u32 *)e->tex->image;
+
                     Port_DiagNote("effects: bad texture entry, index, flags", (long)i, (long)e->flags);
-                    Port_DiagNote("effects: bad texture entry, pool of tex, pool of image", (long)EftDiag_PoolOf(e->tex), (long)EftDiag_PoolOf(e->tex->image));
-                    Port_DiagNote("effects: bad texture entry, image block, clut block", (long)e->imageBlock, (long)e->clutBlock);
+                    Port_DiagNote("effects: bad texture entry, tex offset in its pool, image pointer low 32 bits", (long)EftDiag_PoolOf(e->tex), (long)(u32)(unsigned long)w);
+                    if (w != NULL && Port_RefOk(w, 0x40)) {
+                        Port_DiagNote("effects: bad image words 0x00 / 0x04", (long)w[0], (long)w[1]);
+                        Port_DiagNote("effects: bad image words 0x08 imageSize / 0x0C clutSize", (long)w[2], (long)w[3]);
+                        Port_DiagNote("effects: bad image words 0x10 imageBlocks / 0x14 clutBlocks", (long)w[4], (long)w[5]);
+                        Port_DiagNote("effects: bad image words 0x38 / 0x3C (pixel / CLUT pointer)", (long)w[14], (long)w[15]);
+                    } else {
+                        Port_DiagNote("effects: bad texture entry: the image record itself is not valid memory", 0, 0);
+                    }
                 }
             }
         }

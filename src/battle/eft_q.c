@@ -873,12 +873,6 @@ void EftChar_Kill(s32 chr) {
     if (c->task != NULL) {
         BtlScene_Reset(chr == 0 ? 2 : 3);
         EftChar_SetPool(chr);
-#ifdef PORT
-        {
-            extern s32 BtlTaskList_KillInPool(s32 slot, void *skip);
-            BtlTaskList_KillInPool(chr == 0 ? 7 : 8, c->task);
-        }
-#endif
         BtlTask_Kill(c->task);
         c->task = NULL;
     }

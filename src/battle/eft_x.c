@@ -1016,6 +1016,17 @@ void EftPart10_SelectTex(EftPart10 *em, EftXTexEntry *tbl, s32 a, s32 b) {
     }
     em->texA = tbl[a];
     em->texB = tbl[b];
+#ifdef PORT
+    {
+        extern void Port_DiagNote(const char *what, long a, long b);
+        static s32 sSel;
+
+        if (sSel < 8 && (a > 0 || b > 0)) { /* which texture indices an emitter blends, and the table's own size word */
+            sSel++;
+            Port_DiagNote("effects: part10 texture select, a, b", a, b);
+        }
+    }
+#endif
 }
 
 /* Builds the emitter's TEX0 (texture A with the CLUT of texture B) once per frame into its table entry. */
