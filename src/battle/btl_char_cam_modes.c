@@ -861,20 +861,23 @@ void ChrCam_StartCut(ChrCamChr *chr) {
     valC = def->dist * scale;
     valCDelta = def->distDelta * scale;
 #ifdef PORT
-    /* The cut that closes a transformation (a character's own table, index 6) is a face close-up on the console:
-       0.4 body heights (log 2026-10-15: distance 8661 for a height of 21653), which fills a phone's wide screen.
-       Only that cut is held at least one body height away, at its start and at its end; the fight camera and every
-       other cut are not touched. (The eye is not inside the body here -- the clearance test in ChrCam_CalcCut sees it
-       far away and never fires -- so the distance itself is what has to change.) */
-    if (chr->cut.unk0 == 0 && chr->cut.unk4 == 6 && scale >= 1.0f && scale < 1000.0f) {
+    /* Every scripted cut (the fight camera is ChrCam_CalcFree / CalcLockOn and is not touched): the shot is framed
+       at `def->dist` body heights, and several cuts ask for a fraction of one. The cut that closes a transformation
+       (a character's own table, index 6) asks for 0.4 (log 2026-10-15: distance 8661 for a height of 21653), and the
+       attack cinematics and other animations take their cuts from the common table (unk0 == 1) with the same kind of
+       small distances. On 4:3 the frame hid it; on a phone the camera ends up inside the body and passes through it.
+       Every cut is held at least one body height away, at its start and at its end; whatever it asks for above that is
+       left as the character's table asks. A cut that starts while the model is rebuilt (the height reads 0 or
+       nonsense) floors against a typical body height instead, so the shot cannot collapse onto the node either. */
+    {
+        f32 floorDist = (scale >= 1.0f && scale < 1000.0f) ? scale : 15.0f;
         f32 endDist = valC + valCDelta;
-        f32 minDist = scale;
 
-        if (valC < minDist) {
-            valC = minDist;
+        if (valC < floorDist) {
+            valC = floorDist;
         }
-        if (endDist < minDist) {
-            endDist = minDist;
+        if (endDist < floorDist) {
+            endDist = floorDist;
         }
         valCDelta = endDist - valC;
     }
