@@ -1,6 +1,7 @@
 #include "common.h"
 #include "battle/battle.h"
 #include "battle/btl_demo_cam.h"
+#include "battle/btl_char_cam_int.h"
 #include "sys/heap.h"
 
 /* Scripted (demo) camera, 0x23D1E8-0x23E040. See battle/btl_demo_cam.h. */
@@ -281,6 +282,49 @@ s32 DemoCam_Update(void) {
                 }
             }
         }
+#ifdef PORT
+        {
+            /* Keep DemoCam (transformation/cinematic character cam anims, flags D7/D8/D9) away from the character body so it doesn't pass through it. */
+            void *chrObj = NULL;
+            s32 chrId = -1;
+            if (gDemoCam->chr != NULL) {
+                chrObj = gDemoCam->chr;
+                chrId = *(s32 *)((u8 *)chrObj + 0x10);
+            } else if (gDemoCam->obj != NULL) {
+                chrObj = gDemoCam->obj;
+                chrId = *(s32 *)((u8 *)chrObj + 0x10);
+            }
+            if (chrObj != NULL && chrId >= 0) {
+                ChrCamChr *c = BtlChar_Get(chrId);
+                if (c != NULL) {
+                    f32 radius = BtlCharApi_GetRadius(chrId);
+                    f32 height = BtlCharApi_GetHeight(chrId);
+                    if (height >= 1.0f && height < 2000.0f) {
+                        f32 minR = radius + height * 0.15f;
+                        Vec4 *eyev = (Vec4 *)inv.m[3];
+                        f32 dx = eyev->x - c->body.pos.x;
+                        f32 dz = eyev->z - c->body.pos.z;
+                        f32 d = __builtin_sqrtf(dx * dx + dz * dz);
+                        f32 midY = c->body.pos.y - height * 0.5f;
+                        if (d < minR) {
+                            if (d < 0.01f) {
+                                f32 yaw = c->body.yaw;
+                                dx = -Mathf_Sin(yaw);
+                                dz = -Mathf_Cos(yaw);
+                                d = 1.0f;
+                            }
+                            /* Push out a bit more for cinematic cams */
+                            f32 pushR = minR + height * 0.1f;
+                            eyev->x = c->body.pos.x + dx / d * pushR;
+                            eyev->z = c->body.pos.z + dz / d * pushR;
+                            Mtx_InverseRT(&gDemoCam->view.world2view2, &inv);
+                            Vu0View_LoadMtx(&gDemoCam->view.world2view2);
+                        }
+                    }
+                }
+            }
+        }
+#endif
         View_UpdateMatrices(&gDemoCam->view, (Vec4 *)inv.m[3]);
         View_Apply(&gDemoCam->view, 1);
         return 0;
