@@ -1558,7 +1558,12 @@ static void vk_frame_end_inner(void) {
     if (acquired && swap != NULL && !(best >= 0 && gsTargets[best].cleared)) {
         SDL_GPUColorTargetInfo sct;
         SDL_GPURenderPass *sp;
+        static int sNotShown;
 
+        if (sNotShown++ < 20) {
+            fprintf(stderr, "bt3: present: frame %u not shown (main fbp %d, target %d, cleared %d): swapchain cleared to black\n", (unsigned)gGsFrame,
+                    (int)gGsMainFbp, best, best >= 0 ? (int)gsTargets[best].cleared : -1);
+        }
         SDL_zero(sct);
         sct.texture = swap;
         sct.load_op = SDL_GPU_LOADOP_CLEAR;

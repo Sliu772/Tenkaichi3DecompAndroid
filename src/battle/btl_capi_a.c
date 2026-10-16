@@ -542,7 +542,7 @@ void BtlCharApi_GetNodePos(s32 objId, s32 node, Vec4 *out) {
 
                     if (sFar < 40) {
                         sFar++;
-                        Port_DiagNote("node far from its object, object used: node, distance x1000", node, (s32)(__builtin_sqrtf(d2) * 1000.0f));
+                        Port_DiagNote("node far from its object, object used: node, distance x1000", node, (s32)(sqrtf(d2) * 1000.0f));
                         Port_DiagNote("node far from its object: object id, height x1000", objId, (s32)(h * 1000.0f));
                     }
                     Vec4_Copy(out, &obj->pos);

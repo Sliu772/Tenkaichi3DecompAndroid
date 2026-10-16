@@ -200,7 +200,7 @@ void ChrCam_CalcCut(ChrCamChr *chr, Vec4 *eye, Vec4 *rot, Vec4 *target) {
            the body with dist 21.6, so something in yaw, pitch or the sin / cos results was out of range: the length is bounded
            here (a NaN also fails the test) and the values are logged once, to name the culprit next. */
         f32 ad = __builtin_fabsf(dist);
-        f32 dl = __builtin_sqrtf(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+        f32 dl = sqrtf(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
         static s32 sBad;
 
         if (!(dl <= ad * 1.01f + 0.01f)) {
@@ -237,8 +237,8 @@ void ChrCam_CalcCut(ChrCamChr *chr, Vec4 *eye, Vec4 *rot, Vec4 *target) {
             f32 ez = eye->z - bz;
             f32 lx = look.x - bx;
             f32 lz = look.z - bz;
-            f32 de = __builtin_sqrtf(ex * ex + ez * ez);
-            f32 dl = __builtin_sqrtf(lx * lx + lz * lz);
+            f32 de = sqrtf(ex * ex + ez * ez);
+            f32 dl = sqrtf(lx * lx + lz * lz);
 
             if (sTrace2 < 16 && cut->unk4 == 6 && (cut->timer % 3) == 0) {
                 sTrace2++;
@@ -280,7 +280,7 @@ void ChrCam_CalcCut(ChrCamChr *chr, Vec4 *eye, Vec4 *rot, Vec4 *target) {
         f32 minR = radius + height * 0.1f;
         f32 dx = eye->x - chr->body.pos.x;
         f32 dz = eye->z - chr->body.pos.z;
-        f32 d = __builtin_sqrtf(dx * dx + dz * dz);
+        f32 d = sqrtf(dx * dx + dz * dz);
         f32 mid = chr->body.pos.y - height * 0.5f; /* y is up-negative */
         static s32 sPushed;
         static s32 sTrace;

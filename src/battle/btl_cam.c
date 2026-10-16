@@ -41,7 +41,7 @@ static void DemoCam_KeepClear(void) {
     dx = inv.m[3][0] - mx;
     dy = inv.m[3][1] - my;
     dz = inv.m[3][2] - mz;
-    d = __builtin_sqrtf(dx * dx + dy * dy + dz * dz);
+    d = sqrtf(dx * dx + dy * dy + dz * dz);
     minD = h * 1.2f;
     if (d < minD && d > 0.001f) {
         k = minD / d;
