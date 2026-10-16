@@ -1182,8 +1182,89 @@ s32 EftSprPack_IsValid(EftSprPack *pack) {
 }
 
 /* Updates the root list. No caller. */
+#ifdef PORT
+/* fix82 (diagnostic only): every 120 updates the whole task tree is counted by class; a line is written only for a class
+   whose count changed since the last census, so a class that keeps growing (tasks nobody ends) shows up as a rising series. */
+extern void Port_DiagNote(const char *what, long a, long b);
+
+#define CENSUS_CLASSES 64
+static long sCensusKey[CENSUS_CLASSES];
+static s32 sCensusLast[CENSUS_CLASSES];
+static s32 sCensusCount[CENSUS_CLASSES];
+static s32 sCensusDead[CENSUS_CLASSES];
+static s32 sCensusSampleX[CENSUS_CLASSES];
+static s32 sCensusSampleZ[CENSUS_CLASSES];
+static s32 sCensusUsed;
+static s32 sCensusTotal;
+
+static void Census_Walk(BtlTaskList *list, s32 depth) {
+    BtlTask *task;
+    s32 guard = 0;
+
+    if (list == NULL || depth > 8) {
+        return;
+    }
+    for (task = list->head; task != NULL && guard < 3000; task = task->next, guard++) {
+        long key = (long)((u8 *)task->cls - (u8 *)&BtlTask_Kill);
+        s32 i;
+
+        for (i = 0; i < sCensusUsed && sCensusKey[i] != key; i++) {
+        }
+        if (i == sCensusUsed) {
+            if (i >= CENSUS_CLASSES) {
+                continue;
+            }
+            sCensusKey[i] = key;
+            sCensusLast[i] = 0;
+            sCensusUsed++;
+        }
+        if (sCensusCount[i] == 0) {
+            sCensusSampleX[i] = (s32)(task->pos.x * 1000.0f);
+            sCensusSampleZ[i] = (s32)(task->pos.z * 1000.0f);
+        }
+        sCensusCount[i]++;
+        sCensusTotal++;
+        if (BTL_TASK_BITS(task)->dead) {
+            sCensusDead[i]++;
+        }
+        if (task->child != NULL) {
+            Census_Walk(task->child, depth + 1);
+        }
+    }
+}
+
+static void Census_Run(void) {
+    static s32 sFrames;
+    static s32 sRuns;
+    s32 i;
+
+    sFrames++;
+    if ((sFrames % 120) != 0 || gBtlTaskRoot == NULL) {
+        return;
+    }
+    for (i = 0; i < CENSUS_CLASSES; i++) {
+        sCensusCount[i] = 0;
+        sCensusDead[i] = 0;
+    }
+    sCensusTotal = 0;
+    Census_Walk(gBtlTaskRoot, 0);
+    sRuns++;
+    Port_DiagNote("fix82 census: number, tasks alive in total", sRuns, sCensusTotal);
+    for (i = 0; i < sCensusUsed; i++) {
+        if (sCensusCount[i] != sCensusLast[i]) {
+            Port_DiagNote("fix82 class (offset from BtlTask_Kill): was, now", sCensusKey[i], sCensusLast[i] * 10000L + sCensusCount[i]);
+            Port_DiagNote("fix82 class: dead flagged, sample task x z x1000", sCensusDead[i], (long)sCensusSampleX[i] * 1000000L + sCensusSampleZ[i]);
+            sCensusLast[i] = sCensusCount[i];
+        }
+    }
+}
+#endif
+
 void BtlTaskList_UpdateRoot(void) {
     BtlTaskList_Update(gBtlTaskRoot);
+#ifdef PORT
+    Census_Run();
+#endif
 }
 
 /* Runs the update callback of every task of a list, in list order, each followed by its child list; a task
