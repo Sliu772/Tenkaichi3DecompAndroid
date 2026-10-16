@@ -155,6 +155,7 @@ typedef struct Tex {
     uint32_t ow, oh, rw, rh; /* then: the original's size and the replacement's */
     uint32_t amax;           /* and the largest alpha byte of the original */
     uint32_t bytes;          /* its size in GPU memory (about: the levels' pixels) */
+    uint32_t uni, isuni;     /* fix86: a texture of one colour only: that colour (alpha in the top byte) */
 } Tex;
 static uint64_t sTexBytes; /* the cache's textures' sizes, together */
 uint64_t GsDraw_TexBytes(void) { return sTexBytes; } /* fix63: for the heartbeat line */
@@ -257,6 +258,7 @@ static GsTex texture_get(int ctx) {
     int trim;
     uint32_t packMaxAlpha = 255, rw = tw, rh = th;
     int packFormat = GS_TEXFMT_RGBA8, replaced = 0;
+    uint32_t uniColor = 0, isUni = 0; /* fix86 */
 
     if (tw > 1024) { tw = 1024; }
     if (th > 1024) { th = 1024; }
@@ -401,6 +403,8 @@ static GsTex texture_get(int ctx) {
         }
         if (same) {
             tex_diag("uniform texture", t0, px[0]);
+            uniColor = px[0];
+            isUni = 1;
         }
     }
     gGpuTexNs += gpu_now() - tex_t0;
@@ -459,6 +463,8 @@ static GsTex texture_get(int ctx) {
     t->rw = rw;
     t->rh = rh;
     t->amax = replaced ? packMaxAlpha : 255u;
+    t->uni = uniColor;
+    t->isuni = isUni;
     t->bytes = replaced ? (uint32_t)(texBytes < 0xFFFFFFFFu ? texBytes : 0xFFFFFFFFu) : tw * th * 4;
     sTexBytes += t->bytes;
     return t->tex;
@@ -804,6 +810,35 @@ static int draw_state(int ctx, int topo, int sprite, int vu, GsDraw *d, float *u
                 sTexSkip = 0;
                 gsSkipped++;
                 return 0;
+            }
+            /* fix86: the see-through pass gives the fighters' palettes ONE colour with alpha 0xF9 or 0xFC to write an id
+               (texdiag: "uniform texture" ... color f90000ff). A draw with such a texture is meant to write the alpha
+               byte only; on iOS the ones that end a ki charge, a Kamehameha or a transformation reach the visible picture
+               with their RGB (flat red shapes left standing in the world until the camera leaves them). A draw that
+               samples one of these textures and writes colour into the main frame buffer is not drawn.
+               BT3_FIX86=0 switches this off, for telling whether it is the cause. */
+            if (sLast != NULL && sLast->tex == d->tex && sLast->isuni && (sLast->uni >> 24) >= 0xF0) {
+                static int sFix86On = -1;
+                uint32_t fm = (uint32_t)(gGs.frame[ctx] >> 32);
+
+                if (sFix86On < 0) {
+                    const char *e = getenv("BT3_FIX86");
+
+                    sFix86On = !(e != NULL && e[0] == '0');
+                }
+                if (sFix86On && ((fm & 0xFF) != 0xFF || (fm & 0xFF00) != 0xFF00 || (fm & 0xFF0000) != 0xFF0000) &&
+                    (uint32_t)(gGs.frame[ctx] & 0x1FF) == (uint32_t)gGsMainFbp) {
+                    static unsigned sFix86N;
+
+                    if (sFix86N < 60 || sFix86N % 1000 == 0) {
+                        fprintf(stderr, "bt3 texdiag: fix86 skipped a draw (%u so far): frame %u tex0 %016llx color %08x fbmsk %08x alpha %016llx prim %llx vu %d\n",
+                                sFix86N + 1, gGsFrame, (unsigned long long)t0, sLast->uni, fm, (unsigned long long)gGs.alpha[ctx],
+                                (unsigned long long)prim, vu);
+                    }
+                    sFix86N++;
+                    gsSkipped++;
+                    return 0;
+                }
             }
         }
     }
