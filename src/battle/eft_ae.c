@@ -1249,11 +1249,11 @@ static void Census_Run(BtlTaskList *root) {
     sCensusTotal = 0;
     Census_Walk(root, 0);
     sRuns++;
-    Port_DiagNote("fix82 census: number, tasks alive in total", sRuns, sCensusTotal);
+    Port_DiagNote("eff census: number, tasks alive in total", sRuns, sCensusTotal);
     for (i = 0; i < sCensusUsed; i++) {
         if (sCensusCount[i] != sCensusLast[i]) {
-            Port_DiagNote("fix82 class (offset from BtlTask_Kill): was, now", sCensusKey[i], sCensusLast[i] * 10000L + sCensusCount[i]);
-            Port_DiagNote("fix82 class: dead flagged, sample task x z x1000", sCensusDead[i], (long)sCensusSampleX[i] * 1000000L + sCensusSampleZ[i]);
+            Port_DiagNote("eff census class (offset from BtlTask_Kill): was, now", sCensusKey[i], sCensusLast[i] * 10000L + sCensusCount[i]);
+            Port_DiagNote("eff census class: dead flagged, sample task x z x1000", sCensusDead[i], (long)sCensusSampleX[i] * 1000000L + sCensusSampleZ[i]);
             sCensusLast[i] = sCensusCount[i];
         }
     }

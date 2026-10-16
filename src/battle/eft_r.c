@@ -981,7 +981,16 @@ s32 EftCharge_Start(s32 *arg) {
     if (list == NULL) {
         return 0;
     }
+#ifdef PORT
+    {
+        static s32 sChargeObj; /* fix85: static, the address of a local does not survive the trip to the task init on iOS */
+
+        sChargeObj = objId;
+        task = BtlTaskList_AddTail(list, &gEftChargeClass, &sChargeObj);
+    }
+#else
     task = BtlTaskList_AddTail(list, &gEftChargeClass, &objId);
+#endif
     if (task == NULL) {
         return 0;
     }
@@ -1349,7 +1358,14 @@ void EftKiBlast_Fire(EftRArg arg) {
     void *list = EftChar_GetList(arg.objId, arg.type == 0 ? 1 : 2);
 
     if (list != NULL) {
+#ifdef PORT
+        static EftRArg sKiBlastArg; /* fix85: static, see EftBlastObj_Create */
+
+        sKiBlastArg = arg;
+        BtlTaskList_AddTail(list, &gEftKiBlastClass, &sKiBlastArg);
+#else
         BtlTaskList_AddTail(list, &gEftKiBlastClass, &arg);
+#endif
     }
 }
 
@@ -1528,7 +1544,16 @@ s32 EftBlastCharge_Start(EftBlastChargeArg *arg) {
     if (list == NULL) {
         return 0;
     }
+#ifdef PORT
+    {
+        static EftBlastChargeArg sBlastChargeArg; /* fix85: static, see EftBlastObj_Create */
+
+        sBlastChargeArg = a;
+        task = BtlTaskList_AddTail(list, &gEftBlastChargeClass, &sBlastChargeArg);
+    }
+#else
     task = BtlTaskList_AddTail(list, &gEftBlastChargeClass, &a);
+#endif
     if (task == NULL) {
         return 0;
     }
@@ -1705,8 +1730,16 @@ void EftKiBomb_Fire(EftRArg arg) {
     void *list = EftChar_GetList(arg.objId, 2);
 
     if (list != NULL) {
+#ifdef PORT
+        static EftRArg sKiBombArg; /* fix85: static, see EftBlastObj_Create */
+
+        sKiBombArg = arg;
+        BtlTaskList_AddTail(list, &gEftKiBombClass, &sKiBombArg);
+        BtlTaskList_AddTail(list, &gEftKiBombClass, &sKiBombArg);
+#else
         BtlTaskList_AddTail(list, &gEftKiBombClass, &arg);
         BtlTaskList_AddTail(list, &gEftKiBombClass, &arg);
+#endif
     }
 }
 

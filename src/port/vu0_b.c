@@ -35,6 +35,23 @@
 #include <string.h>
 
 #include "port/vu0_b.h"
+
+/* fix84 (iOS): the game hands this file ADDRESSES as 4-byte offsets from the Mach-O header when they are those of its
+   static buffers or of a stack local (bt3 logs: FIXRAW in clip_project and Vu0Cur_StoreMtx, one signal per access).
+   A host pointer on iOS is always >= 4 GB (the low 4 GB are __PAGEZERO), so a non-zero value below it is an offset:
+   the header is added here, once per call, instead of by the fault handler on every access. A real pointer passes
+   through unchanged, and so does every other platform. */
+#if defined(BT3_IOS) || defined(__APPLE__)
+#include <stdint.h>
+extern char _mh_execute_header[] __attribute__((visibility("hidden")));
+static inline void *bt3_hostptr(const void *p) {
+    uintptr_t v = (uintptr_t)p;
+
+    return (v != 0 && v < 0x100000000ULL) ? (void *)((uintptr_t)_mh_execute_header + v) : (void *)p;
+}
+#else
+#define bt3_hostptr(p) ((void *)(p))
+#endif
 #ifdef REF_VU0_EXTERN_ARITH
 /* The port compiles this file without the compiler's built-in functions, which made every float <-> bit pattern
    conversion below (a memcpy of four bytes) a call into the C library: several per float operation. */
@@ -999,11 +1016,19 @@ static void clip_project(RefVec4i *scr, RefVec4f *stq, const RefVec4f *rows, con
 void Ref_ClipPoly_ProjectMtx(RefVec4i *scr, RefVec4f *stq, const RefMtx44f *m, const RefClipVtx *poly, int n) {
     RefVec4f rows[4];
 
+    scr = (RefVec4i *)bt3_hostptr(scr);
+    stq = (RefVec4f *)bt3_hostptr(stq);
+    m = (const RefMtx44f *)bt3_hostptr(m);
+    poly = (const RefClipVtx *)bt3_hostptr(poly);
+
     mtx_load(rows, m);
     clip_project(scr, stq, rows, poly, n);
 }
 
 void Ref_ClipPoly_ProjectCur(RefVec4i *scr, RefVec4f *stq, const RefClipVtx *poly, int n) {
+    scr = (RefVec4i *)bt3_hostptr(scr);
+    stq = (RefVec4f *)bt3_hostptr(stq);
+    poly = (const RefClipVtx *)bt3_hostptr(poly);
     clip_project(scr, stq, &VF(16), poly, n);
 }
 

@@ -50,6 +50,23 @@
 
 #include <string.h>
 #include "port/vu0_a.h"
+
+/* fix84 (iOS): the game hands this file ADDRESSES as 4-byte offsets from the Mach-O header when they are those of its
+   static buffers or of a stack local (bt3 logs: FIXRAW in clip_project and Vu0Cur_StoreMtx, one signal per access).
+   A host pointer on iOS is always >= 4 GB (the low 4 GB are __PAGEZERO), so a non-zero value below it is an offset:
+   the header is added here, once per call, instead of by the fault handler on every access. A real pointer passes
+   through unchanged, and so does every other platform. */
+#if defined(BT3_IOS) || defined(__APPLE__)
+#include <stdint.h>
+extern char _mh_execute_header[] __attribute__((visibility("hidden")));
+static inline void *bt3_hostptr(const void *p) {
+    uintptr_t v = (uintptr_t)p;
+
+    return (v != 0 && v < 0x100000000ULL) ? (void *)((uintptr_t)_mh_execute_header + v) : (void *)p;
+}
+#else
+#define bt3_hostptr(p) ((void *)(p))
+#endif
 #ifdef REF_VU0_EXTERN_ARITH
 /* The port compiles this file without the compiler's built-in functions, which made every float <-> bit pattern
    conversion below (a memcpy of four bytes) a call into the C library: several per float operation. */
@@ -2089,6 +2106,7 @@ void Ref_Vu0Cur_LoadMtx(RefMtx44 *m) {
 
 /* 0x120B98: m = current. */
 void Ref_Vu0Cur_StoreMtx(RefMtx44 *m) {
+    m = (RefMtx44 *)bt3_hostptr(m);
     op_sqc2(16, m);                        /* 120B98  sqc2 vf16, 0x0(a0) */
     op_sqc2(17, AT(m, 0x10));              /* 120B9C  sqc2 vf17, 0x10(a0) */
     op_sqc2(18, AT(m, 0x20));              /* 120BA0  sqc2 vf18, 0x20(a0) */

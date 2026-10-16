@@ -417,7 +417,16 @@ s32 EftTransform_Start(EftTransformArg *req) {
     if (gEftTransform->busy != 0) {
         return 0;
     }
+#ifdef PORT
+    {
+        static EftTransformArg sTransformArg; /* fix85: static, see EftBlastObj_Create */
+
+        sTransformArg = arg;
+        task = BtlTaskList_AddTail(gEftTransformList, gEftTransformClass, &sTransformArg);
+    }
+#else
     task = BtlTaskList_AddTail(gEftTransformList, gEftTransformClass, &arg);
+#endif
     if (task == NULL) {
         return 0;
     }
