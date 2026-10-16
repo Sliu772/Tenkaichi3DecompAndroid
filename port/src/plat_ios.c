@@ -625,7 +625,12 @@ static int game_entry(int argc, char *argv[]) {
     if (getenv("BT3_GS_DUMP") == NULL) {
         setenv("BT3_GS_DUMP", "5300", 1); /* bring-up: list the primitives, registers and uploads of frame 5300 (the start screen, after the intro movie) */
     }
+    if (getenv("BT3_GS_CAPTURE") == NULL) {
+        /* fix104: capture one frame on demand (its draws in the log, and the picture as bt3_capture.ppm) */
+        setenv("BT3_GS_CAPTURE", "bt3_capture.txt", 1);
+    }
     fprintf(stderr, "bt3 iOS: BT3_GS=%s\n", getenv("BT3_GS"));
+    fprintf(stderr, "bt3 iOS: frame capture: create bt3_capture.txt in Documents (or leave and return to the app) for the next frame's draws and bt3_capture.ppm\n");
     SDL_AddEventWatch(life_watch, NULL);
     start_heartbeat();
     ios_prepare_data(); /* no gamedata yet: unpack the .iso the user copied into Documents (shows its progress) */

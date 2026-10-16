@@ -664,6 +664,171 @@ static void depth_clut(int ctx) {
     gsDraws[gsDrawCount++] = d;
 }
 
+/* fix104: one frame's draws listed on demand, and (SDL_GPU back end) written out as bt3_capture.ppm. The frame
+   is named by the trigger file (BT3_GS_CAPTURE; plat_ios.c sets bt3_capture.txt, the working folder on iOS is
+   the app's Documents): creating it captures the next frame. The file holds "x y [radius]" of the point of the
+   game's own 512 x 448 picture to report, or "all" for the frame's whole list; anything else (or nothing) means
+   the middle of the picture. The file is removed and bt3_capture_done.txt left behind, so another capture is
+   another copy of it. GsDraw_CaptureArm() asks for the same with no file: the app arms it as it goes to the
+   background, and the first frame drawn after the user comes back is the one listed. */
+static int sCapOn = -1;      /* the feature is on (BT3_GS_CAPTURE set) */
+static int sCapFrame = -1;   /* the frame to list, -1: none */
+static int sCapShot = -1;    /* the frame that was listed: the back end writes it out too */
+static int sCapAll;          /* list every draw of the frame, not only the ones over the point */
+static int sCapPending;      /* armed with no file (the return from the background) */
+static int sCapRetry;        /* frames a capture was pushed ahead for having nothing recorded */
+static float sCapX = 256.0f, sCapY = 224.0f, sCapR = 48.0f; /* in the game's 512 x 448 picture */
+
+int GsDraw_CaptureFrame(void) {
+    return sCapShot;
+}
+
+void GsDraw_CaptureArm(void) {
+    if (sCapOn != 0) { /* resolved and on, or not resolved yet */
+        sCapPending = 1;
+    }
+}
+
+/* the cache entry a draw's texture came from (its TEX0, and fix86's one-colour note), NULL for the white one or a target's own */
+static const Tex *cap_tex(GsTex t) {
+    int i;
+
+    for (i = 0; i < gsTexCount; i++) {
+        if (sTex[i].tex == t) {
+            return &sTex[i];
+        }
+    }
+    return NULL;
+}
+
+/* one draw: 1 when it was listed */
+static int cap_draw(uint32_t k, const GsDraw *d) {
+    const Tex *t = cap_tex(d->tex);
+    float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+    uint32_t i;
+
+    if (d->native != 0) {
+        fprintf(stderr, "capture: draw %u native %d target %d (a whole-picture effect)\n", k, d->native, d->target);
+        return 1;
+    }
+    for (i = 0; i < d->count; i++) { /* the draw's corners, where the GS would place them */
+        float x = 0.0f, y = 0.0f;
+        if (d->vu != 0 && d->first + i < gsVuIdxCount && gsVuIdx[d->first + i] < gsVuVertCount) {
+            x = gsVuVerts[gsVuIdx[d->first + i] * 12];
+            y = gsVuVerts[gsVuIdx[d->first + i] * 12 + 1];
+        } else if (d->vu == 0 && d->first + i < gsVertCount) {
+            x = gsVerts[d->first + i].x;
+            y = gsVerts[d->first + i].y;
+        }
+        if (x < x0) { x0 = x; }
+        if (x > x1) { x1 = x; }
+        if (y < y0) { y0 = y; }
+        if (y > y1) { y1 = y; }
+    }
+    if (!sCapAll && (x1 < sCapX - sCapR || x0 > sCapX + sCapR || y1 < sCapY - sCapR || y0 > sCapY + sCapR)) {
+        return 0; /* it does not reach the point */
+    }
+    fprintf(stderr, "capture: draw %u vu %d target %d tex_is_target %d count %u bbox %.1f,%.1f..%.1f,%.1f blend %d %d %d %d misc %.0f %.0f %.0f %.0f",
+            k, d->vu, d->target, d->tex_is_target, d->count, (double)x0, (double)y0, (double)x1, (double)y1, d->mode[0], d->mode[1], d->mode[2],
+            d->mode[3], (double)d->misc[0], (double)d->misc[1], (double)d->misc[2], (double)d->misc[3]);
+    if (t != NULL) {
+        fprintf(stderr, " tex0 %016llx tbp %u psm %u size %ux%u cbp %u uni %u color %08x\n", (unsigned long long)t->tex0,
+                (unsigned)(t->tex0 & 0x3FFF), (unsigned)((t->tex0 >> 20) & 0x3F), 1u << ((t->tex0 >> 26) & 15), 1u << ((t->tex0 >> 30) & 15),
+                (unsigned)((t->tex0 >> 37) & 0x3FFF), t->isuni, t->uni);
+    } else {
+        fprintf(stderr, " no TEX0 (the white one, or a target's own picture)\n");
+    }
+    if (d->vu == 0 && d->count <= 8) { /* a small piece: its vertices themselves */
+        for (i = 0; i < d->count; i++) {
+            const Vtx *v = &gsVerts[d->first + i];
+            fprintf(stderr, "capture:    (%.1f, %.1f) z %.6f st %.4f %.4f q %.3f rgba %u %u %u %u\n", (double)v->x, (double)v->y, (double)v->z,
+                    (double)v->s, (double)v->t, (double)v->q, v->r, v->g, v->b, v->a);
+        }
+    }
+    return 1;
+}
+
+void GsDraw_Capture(void) {
+    static unsigned ticks;
+    const char *path;
+    FILE *fp;
+
+    if (sCapOn < 0) {
+        sCapOn = getenv("BT3_GS_CAPTURE") != NULL;
+    }
+    sCapShot = -1;
+    if (sCapOn == 0) {
+        return;
+    }
+    path = getenv("BT3_GS_CAPTURE");
+    if (sCapFrame < 0 && (sCapPending || (++ticks % 60) == 0)) {
+        char buf[80];
+        if (sCapPending) { /* the app's first frame after coming back */
+            sCapPending = 0;
+            sCapAll = 0;
+            sCapX = 256.0f * SCALE;
+            sCapY = 224.0f * SCALE;
+            sCapR = 48.0f * SCALE;
+            sCapRetry = 0;
+            sCapFrame = (int)gGsFrame + 2;
+            fprintf(stderr, "capture: the app came back: frame %d will be listed\n", sCapFrame);
+        } else if (path != NULL && (fp = fopen(path, "rb")) != NULL) {
+            size_t n = fread(buf, 1, sizeof(buf) - 1, fp);
+            buf[n] = 0;
+            fclose(fp);
+            remove(path);
+            sCapAll = strstr(buf, "all") != NULL;
+            sCapX = 256.0f;
+            sCapY = 224.0f;
+            sCapR = 48.0f;
+            if (!sCapAll) {
+                int px = 0, py = 0, pr = 0;
+                if (sscanf(buf, "%d %d %d", &px, &py, &pr) >= 2) { /* the game's own picture */
+                    sCapX = (float)px;
+                    sCapY = (float)py;
+                    sCapR = pr > 0 ? (float)pr : 48.0f;
+                }
+                fprintf(stderr, "capture: %s: the point is %d,%d +- %d of the 512 x 448 picture\n", path, (int)sCapX, (int)sCapY, (int)sCapR);
+            }
+            sCapX *= SCALE;
+            sCapY *= SCALE;
+            sCapR *= SCALE;
+            sCapRetry = 0;
+            sCapFrame = (int)gGsFrame + 2;
+            fp = fopen("bt3_capture_done.txt", "w");
+            if (fp != NULL) {
+                fprintf(fp, "frame %d listed\n", sCapFrame);
+                fclose(fp);
+            }
+            fprintf(stderr, "capture: %s: frame %d will be listed\n", path, sCapFrame);
+        }
+    }
+    if (sCapFrame >= 0 && (int)gGsFrame == sCapFrame) { /* frame end: the frame's draws are all there */
+        uint32_t k, printed = 0;
+        if (gsDrawCount == 0 && sCapRetry < 4) { /* a frame the game only re-ran: nothing was drawn */
+            sCapRetry++;
+            sCapFrame = (int)gGsFrame + 1;
+            return;
+        }
+        sCapFrame = -1;
+        sCapShot = (int)gGsFrame;
+        fprintf(stderr, "capture: frame %u: %u draws, %u effects, picture %.0fx%.0f at scale %.2f\n", gGsFrame, gsDrawCount, gsNative,
+                (double)(512.0f * SCALE), (double)(448.0f * SCALE), (double)SCALE);
+        fprintf(stderr, "capture:   %s: point %.1f,%.1f +- %.1f (0,0 is the top left corner)\n",
+                sCapAll ? "the whole list" : "the draws over a point", (double)sCapX, (double)sCapY, (double)sCapR);
+        fprintf(stderr, "capture:   shown frame buffer %d", gGsMainFbp);
+        for (k = 0; k < (uint32_t)gsTargetCount && k < 16; k++) {
+            fprintf(stderr, " | target %u fb %x cleared %d stale %d draws %u", k, gsTargets[k].fbp, gsTargets[k].cleared, gsTargets[k].stale,
+                    gsTargets[k].draws);
+        }
+        fprintf(stderr, "\n");
+        for (k = 0; k < gsDrawCount; k++) {
+            printed += (uint32_t)cap_draw(k, &gsDraws[k]);
+        }
+        fprintf(stderr, "capture: frame %u: %u of %u draws listed\n", gGsFrame, printed, gsDrawCount);
+    }
+}
+
 static int draw_state(int ctx, int topo, int sprite, int vu, GsDraw *d, float *us, float *vs) {
     uint64_t prim = gGs.prim, t0 = gGs.tex0[ctx], test = gGs.test[ctx], cl = gGs.clamp[ctx], sc = gGs.scissor[ctx];
     int tme = (prim >> 4) & 1, src;

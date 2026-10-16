@@ -119,6 +119,12 @@ extern unsigned gsSkipped;      /* primitives of PS2-only passes dropped this fr
 extern unsigned gsVu0Stat[8];   /* fighters' model strips (GsGpu_DrawVu0): calls, resim, full, rejected, drawn, vertices, vu6 calls */
 extern unsigned gsVu0Layer[8];  /* accepted DrawVu0 calls by layer */
 void GsDraw_Vu0Report(void);    /* one "vu0:" line, then the counters restart */
+/* fix104: on demand, one frame's draws listed in the log (BT3_GS_CAPTURE=<file> names the trigger, plat_ios.c
+   sets bt3_capture.txt), and the frame the SDL_GPU back end also writes as bt3_capture.ppm. CaptureArm asks for
+   the same with no file: the app arms it as it goes to the background. */
+void GsDraw_Capture(void);
+void GsDraw_CaptureArm(void);
+int GsDraw_CaptureFrame(void);
 extern int gGsMainFbp;          /* the frame buffer the game shows (gs_sony.c), -1 before the first swap */
 /* created / spent since the front end last cleared them (gs_core.c's slow-frame report) */
 extern unsigned gGpuNewTex, gGpuNewTexPixels, gGpuNewPipes;

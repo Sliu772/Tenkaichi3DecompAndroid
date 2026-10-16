@@ -691,6 +691,9 @@ static void poll_events(void) {
         Ui_Toggle(); /* START + SELECT, held together (also the on-screen controller's two buttons) */
     }
     while (SDL_PollEvent(&ev)) {
+        if (ev.type == SDL_EVENT_WILL_ENTER_BACKGROUND || ev.type == SDL_EVENT_DID_ENTER_BACKGROUND) {
+            GsDraw_CaptureArm(); /* fix104: the frame the app comes back to is listed and written out */
+        }
 #ifdef __ANDROID__
         if (ev.type == SDL_EVENT_WILL_ENTER_BACKGROUND || ev.type == SDL_EVENT_DID_ENTER_BACKGROUND) {
             window_away();
@@ -1062,6 +1065,7 @@ static void vk_frame_end_inner(void) {
             }
         }
     }
+    GsDraw_Capture(); /* fix104: a frame asked for through bt3_capture.txt (or the app's return) is listed here */
     sEndT[0] = gpu_now();
     cmd = SDL_AcquireGPUCommandBuffer(sDev);
     /* uploads: this frame's vertices and the textures decoded for it */
@@ -1612,6 +1616,7 @@ static void vk_frame_end_inner(void) {
     /* BT3_SHOT=<n>: every n frames, read the shown buffer back and write port/build/shots/gpu_NNNNN.ppm */
     {
         static int every = -1;
+        int capf = GsDraw_CaptureFrame(); /* fix104: the frame listed just now is written as bt3_capture.ppm */
         if (every < 0) {
             every = getenv("BT3_SHOT") != NULL ? atoi(getenv("BT3_SHOT")) : 0;
         }
@@ -1628,7 +1633,7 @@ static void vk_frame_end_inner(void) {
             }
         }
         /* BT3_SHOT_FROM / BT3_SHOT_TO limit the frames */
-        if (every > 0 && gGsFrame % (unsigned)every == 0 && best >= 0 && gsTargets[best].cleared &&
+        if (((every > 0 && gGsFrame % (unsigned)every == 0) || (capf >= 0 && (int)gGsFrame == capf)) && best >= 0 && gsTargets[best].cleared &&
             (getenv("BT3_SHOT_FROM") == NULL || (int)gGsFrame >= atoi(getenv("BT3_SHOT_FROM"))) &&
             (getenv("BT3_SHOT_TO") == NULL || (int)gGsFrame <= atoi(getenv("BT3_SHOT_TO")))) {
             SDL_GPUTransferBufferCreateInfo ti;
@@ -1660,7 +1665,11 @@ static void vk_frame_end_inner(void) {
             SDL_WaitForGPUFences(sDev, true, &fence, 1);
             SDL_ReleaseGPUFence(sDev, fence);
             px = SDL_MapGPUTransferBuffer(sDev, tb, false);
-            snprintf(name, sizeof(name), "port/build/shots/gpu_%05u.ppm", gGsFrame);
+            if (capf >= 0 && (int)gGsFrame == capf) {
+                snprintf(name, sizeof(name), "bt3_capture.ppm"); /* fix104: what the log has just listed */
+            } else {
+                snprintf(name, sizeof(name), "port/build/shots/gpu_%05u.ppm", gGsFrame);
+            }
             fp = fopen(name, "wb");
             if (fp != NULL && px != NULL) {
                 fprintf(fp, "P6\n%u %u\n255\n", w, h);
