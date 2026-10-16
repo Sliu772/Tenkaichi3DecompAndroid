@@ -543,6 +543,14 @@ void EftBill_Update(EftZTask *task) {
             w->idle++;
         }
         if (w->idle > 60) {
+            {
+                static s32 sIdleLogs;
+
+                if (sIdleLogs < 60) {
+                    sIdleLogs++;
+                    Port_DiagNote("fix81 bill ended by fix77 (idle): object, effect type", w->arg.chr, w->type);
+                }
+            }
             w->flags |= EFT_BILL_DEAD;
             BtlTask_SetDead(task);
             return;
@@ -563,6 +571,14 @@ void EftBill_Update(EftZTask *task) {
             d0x = w->arg.pos.x - p0.x; d0z = w->arg.pos.z - p0.z;
             d1x = w->arg.pos.x - p1.x; d1z = w->arg.pos.z - p1.z;
             if (d0x * d0x + d0z * d0z > lim * lim && d1x * d1x + d1z * d1z > lim * lim) {
+                {
+                    static s32 sFarLogs;
+
+                    if (sFarLogs < 60) {
+                        sFarLogs++;
+                        Port_DiagNote("fix81 bill ended by fix75 (far): object, effect type", w->arg.chr, w->type);
+                    }
+                }
                 w->flags |= EFT_BILL_DEAD;
                 BtlTask_SetDead(task);
                 return;

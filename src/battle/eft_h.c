@@ -1247,8 +1247,34 @@ void EftEmit_InitState(EftSet *set, EftSetState *st) {
     }
 }
 
+#ifdef PORT
+/* fix81 (diagnostic only): the log shows which commands each effect group receives and who ends it. */
+extern void Port_DiagNote(const char *what, long a, long b);
+static s32 sDiagCmds;
+#endif
+
 /* Counterpart of EftEmit_InitState: nothing to release. */
 void EftEmit_TermState(EftSet *set, EftSetState *st) {
+#ifdef PORT
+    if (set != NULL && st != NULL) {
+        static s32 sTermLogs;
+        s32 live = 0;
+        s32 hh;
+        s32 ii;
+
+        for (hh = 0; hh < 2; hh++) {
+            for (ii = 0; ii < 40; ii++) {
+                if (st->handle[hh][ii] != NULL) {
+                    live++;
+                }
+            }
+        }
+        if (live > 0 && sTermLogs < 120) {
+            sTermLogs++;
+            Port_DiagNote("fix81 term: owner task died with live handles, count", live, sTermLogs);
+        }
+    }
+#endif
 #ifdef PORT
     /* fix75: every effect task (attacks, charges, auras: eft_h / i / j / k / l / o / p / q / r / v / ab) ends here. A sprite with no life
        of its own (EftBill_Create with life <= 0) lives until its owner stops it and sits in the manager's list, not in the fighter's, so
@@ -1428,6 +1454,13 @@ s32 EftEmit_GetFlags(EftSet *set, EftSetState *st, s32 objId, s32 type, s32 idx,
         }
     }
 end:
+#ifdef PORT
+    if ((flags & (EFT_CMD_START | EFT_CMD_STOP | EFT_CMD_KILL)) && sDiagCmds < 400) {
+        sDiagCmds++;
+        Port_DiagNote("fix81 cmd: group type, flags (1 start 2 stop 4 fade 8 kill)", type, flags);
+        Port_DiagNote("fix81 cmd: object*1000+idx, ending*10+kill", objId * 1000 + idx, ending * 10 + kill);
+    }
+#endif
     return flags;
 }
 
@@ -1693,6 +1726,15 @@ void EftEmit_SpawnType16(EftSet *set, EftSetHandles *handles, s32 flags, s32 typ
                 H(n) = EftBill_Create(&arg);
 #ifdef PORT
                 EftBill_SetOwnerSlot(H(n), &H(n));
+                {
+                    static s32 sCreateLogs;
+
+                    if (sCreateLogs < 200) {
+                        sCreateLogs++;
+                        Port_DiagNote("fix81 bill created: object, effect type", chr, type);
+                        Port_DiagNote("fix81 bill created: rate x1000, idx", (s32)(rate * 1000.0f), idx);
+                    }
+                }
 #endif
                 EftBill_SetDelay(H(n), part->unk5);
                 EftBill_SetEndDelay(H(n), part->unk6);
@@ -1715,9 +1757,15 @@ void EftEmit_SpawnType16(EftSet *set, EftSetHandles *handles, s32 flags, s32 typ
             EftBill_SetDir(H(n), dir);
         }
         if (flags & EFT_CMD_KILL) {
+#ifdef PORT
+            Port_DiagNote("fix81 bill: KILL by its emitter, object, effect type", chr, type);
+#endif
             EftBill_Kill(H(n));
             H(n) = NULL;
         } else if (flags & EFT_CMD_STOP) {
+#ifdef PORT
+            Port_DiagNote("fix81 bill: STOP by its emitter, object, effect type", chr, type);
+#endif
             if (flags & EFT_CMD_FADE) {
                 EftBill_SetEndDelay(H(n), 0.0f);
             }
