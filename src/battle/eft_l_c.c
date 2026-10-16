@@ -29,7 +29,7 @@ extern EftTask *BtlTaskList_AddTail(void *list, void *cls, void *arg);
 extern void BtlCharApi_GetNodePos(s32 objId, s32 node, Vec4 *out);
 extern s32 BtlCharApi_ObjTestAttr(s32 objId, u64 mask);
 
-extern void EftEmit_LoadSet(void *arg, void *model, s32 a2, s32 *pack, s32 a4, s32 a5);
+extern void EftEmit_LoadSet(void *arg, void *model, void *a2, s32 *pack, s32 a4, s32 a5);
 extern void EftEmit_FreeSet(void *model);
 extern void EftEmit_BeginFrame(void *model);
 extern s32 EftEmit_GetEndFrames(EftModel *model);

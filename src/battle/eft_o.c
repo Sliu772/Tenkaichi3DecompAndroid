@@ -51,9 +51,9 @@ extern f32 EftMath_WrapAngle(f32 angle);
 extern void EftGfx_DrawPolyAvgZFront(void *verts, s32 arg1, s32 arg2, s32 arg3, s32 front, s32 flip, u64 tex,
                                      s32 zOfs);
 
-extern void *BtlPool_GetCurrent(void);
-extern void *BtlPool_Alloc(void *pool, s32 size);
-extern void BtlPool_Free(void *pool, void *p);
+extern s32 BtlPool_GetCurrent(void);
+extern void *BtlPool_Alloc(s32 slot, s32 size);
+extern void BtlPool_Free(s32 slot, void *ptr);
 extern EftOBattleWork *Battle_GetWork(void);
 extern s32 BtlScene_GetCharCount(void);
 extern s32 *BtlScene_GetCommonEntry(s32 idx);

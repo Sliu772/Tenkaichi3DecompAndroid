@@ -63,9 +63,9 @@ extern void Vu0Cur_RotateX(f32 angle);   /* rotate about X */
 extern void Vu0Cur_RotateY(f32 angle);   /* rotate about Y */
 extern void Vu0Cur_ScaleDiagUniform(f32 scale);   /* scale */
 
-extern void *BtlPool_GetCurrent(void);
-extern void *BtlPool_Alloc(void *pool, s32 size);
-extern void BtlPool_Free(void *pool, void *p);
+extern s32 BtlPool_GetCurrent(void);
+extern void *BtlPool_Alloc(s32 slot, s32 size);
+extern void BtlPool_Free(s32 slot, void *ptr);
 extern s32 *BtlScene_GetCommonEntry(s32 idx);
 extern f32 BtlScene_GetCharScale(s32 chr);
 extern s32 BtlScene_IsEffectStopped(s32 objId, s32 kind);

@@ -20,6 +20,12 @@ Branch `ios-prototype`, CI `.github/workflows/ios.yml` (jobs: abi-check, build-s
 - `port_host.h`: `Port_A2P` / `Port_P2A` convert the game's 4-byte addresses (offsets on iOS) for host code that is handed
   them as integers (DMA tags, name font, sound banks, SIF DMA). Any new host code that reads an address out of the game's
   memory must use them.
+- `abi_mismatch.txt` keeps listing the handles of `ADXF_*`, `ADXT_*`, `func_00277A70` and `sceMpegAdd*`'s callback ON
+  PURPOSE: those declarations use a typedef of a pointer (`ADXF`, `ADXT_HN`, `sceMpegCallback`), which has no `*` for
+  ptr32.py to keep, so the game passes the raw 4-byte value and the port takes it apart with `Port_A2P` (`plat_file.c:85`,
+  `gs/snd_adx.c:404`). Spelling them out as ordinary pointers makes the caller rebase the value, and `Port_A2P` then sees
+  the low half of a real address (off by the image slide). `proto_check.py` is the only check that sees the `gs/*` ones
+  (those files are compiled straight to `.o`, android.py:161).
 - `D_3BE71C` is the number 0x3BE71C (`p32rebase.FIXED`, `ios_pp.FIXED_ADDRESSES`), not a symbol.
 - No OpenGL on iOS: `gs_nogl.c` (empty stand-ins), no `imgui_impl_opengl3.cpp`, `ui.cpp` stubs. `headless.c`'s ELF-only dump is off.
 - Renderer: SDL_GPU's Vulkan driver through MoltenVK 1.4.2 (`MoltenVK.framework` in `Frameworks/`, path given to SDL with

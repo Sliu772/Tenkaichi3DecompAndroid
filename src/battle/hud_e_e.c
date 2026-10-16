@@ -8,9 +8,14 @@
  * that file (same module, same list idiom); see battle/stg_d.h.
  */
 
-/* Number of nodes of a list. */
+/* Number of nodes of a list.
+ * The walk goes through a copy of the parameter: taking the PARAMETER's address is what makes ptr32.py give it 4 bytes
+ * (port/tools/ptr32.py:97-119), while every declaration of this function (stg_d.c) keeps the outer pointer ordinary.
+ * On iOS the two forms are not the same value (4-byte offsets vs 64-bit addresses), so they must agree. A local copy
+ * is the same code with agreeing types. */
 s32 StgRigidList_Count(StgRigidNode *head) {
-    StgRigidNode **link = &head;
+    StgRigidNode *cur = head;
+    StgRigidNode **link = &cur;
     s32 n = 0;
 
     while (*link != NULL) {

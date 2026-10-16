@@ -101,7 +101,7 @@ extern void *Heap_Alloc(s32 size, u32 align, s32 fromTail, s32 heap);
 extern void Heap_Free(void *ptr);
 extern void *memset(void *dst, s32 value, u32 size);
 extern void Tex_Upload(FontTex *tex, u32 tbp, s32 cbp); /* uploads a texture and its CLUT */
-extern void TexFile_UploadAll(void *res, void *tex, void *tex2);
+extern void TexFile_UploadAll(void *file, s32 tbp, s32 cbp); /* no caller here; the definition is in gfxm_b_b.c */
 
 /* 0x239BB0..0x239EA0, defined above with the first part's types. */
 #ifndef PORT /* PORT (iOS, as eft_k.c in fix54): a cast to a function-pointer type becomes a 4-byte pointer under ptr32.py and the real

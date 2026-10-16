@@ -68,7 +68,7 @@ extern void EftEmit_UpdateNodesReq(EftHSlot *slot, EftVolleyPose *pose);
 extern void EftEmit_UpdateTrailWidth(EftSet *set, EftSetState *st);
 
 /* 0x158438.. (effect requests of a fighter, state gp 0x2FE9FC) */
-extern void EftTechEvt_Start(EftHSlot *slot, s32 lead, s32 life);
+extern void *EftTechEvt_Start(EftHSlot *slot, s32 lead, s32 life);
 extern void EftTechEvt_RequestRestart(s32 objId);
 
 /* 0x16A400 module: the shot tasks */

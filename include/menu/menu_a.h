@@ -148,7 +148,9 @@ extern void McFlow_Init(s32 unused);   /* takes no argument; the title passes 1 
 extern void McFlow_Term(void);
 extern void McFlow_Start(s32 mode);
 extern s32 McFlow_Update(void);
-extern void McFlow_SetDoneCb(s32 idx, void *cb, void *arg);
+/* arg is s32, not void *: it is the value McFlow hands back to the callback through the 4-byte doneArg (mcflow_a.h),
+   and the definition takes it that way. Callers pass 0; a pointer would be cut to its low 32 bits. */
+extern void McFlow_SetDoneCb(s32 idx, void *cb, s32 arg);
 extern void Demo_SetupBattle(void);    /* main 0x2617F0: sets up the attract-demo battle */
 extern void Pad_SetRepeat(s32 delay, s32 interval);
 extern void PadWatch_SetEnabled(s32 enable);

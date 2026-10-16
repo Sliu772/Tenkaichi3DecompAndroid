@@ -487,7 +487,7 @@ Vec4 *EftGlow_GetColors(s32 type, s32 paramFlags) {
 
 /* ---- 2. rush-finish burst: fighter effect requests 0x28 (start), 0x29 (second stage), 0x2A (end) --------- */
 
-extern void EftEmit_LoadSet(void *arg, EftQEmitSet *set, s32 a2, s32 *pack, s32 a4, s32 a5);
+extern void EftEmit_LoadSet(void *arg, EftQEmitSet *set, void *a2, s32 *pack, s32 a4, s32 a5);
 extern void EftEmit_FreeSet(EftQEmitSet *set);
 extern void EftEmit_BeginFrame(EftQEmitSet *set);
 extern s32 EftEmit_GetEndFrames(EftQEmitSet *set);

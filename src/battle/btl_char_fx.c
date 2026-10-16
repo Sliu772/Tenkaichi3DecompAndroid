@@ -524,14 +524,14 @@ extern void EftCharge_Burst(s32 objId);
 extern void EftCharge_Stop(s32 objId);
 extern void EftBlastCharge_Start(FxHitArg *arg);
 #ifdef PORT /* PC build: by value, as the definition takes it (the PS2 passes a struct of this size by address) */
-extern void EftRay_CreateByValue(FxLineArg arg);
+extern void *EftRay_CreateByValue(FxLineArg arg);
 #define EftRay_CreateByValue(arg) EftRay_CreateByValue(*(FxLineArg *)(arg))
 #else
 extern void EftRay_CreateByValue(FxLineArg *arg);
 #endif
 extern void EftShotFx_Start(s32 objId, s32 kind);
 #define EftImpact_SpawnHit ((void (*)(FxPosArg *arg))EftImpact_SpawnHit)
-extern void EftShock_Start(s32 *arg);
+extern void *EftShock_Start(s32 *arg);
 extern void StgBlur_SetPasses(s32 view, s32 mode);
 extern void StgBlur_SetCenter(s32 view, Vec4 *pos, s32 arg);
 extern void StgBlur_SetColor0Rgba(s32 view, s32 r, s32 g, s32 b, s32 a);
@@ -855,7 +855,7 @@ extern void EftRushBurst_Start(FxDirArg *arg);
 extern void EftRushBurst_Stage2(s32 objId);
 extern void EftRushBurst_Stop(s32 objId);
 #ifdef PORT /* PC build: by value, as the definition takes it (the PS2 passes a struct of this size by address) */
-extern void EftRay_StartHit(s32 objId, PortVec4 pos, s32 a, s32 b, s32 c, f32 scale);
+extern void *EftRay_StartHit(s32 objId, PortVec4 pos, s32 a, s32 b, s32 c, f32 scale);
 #define EftRay_StartHit(objId, pos, a, b, c, scale) EftRay_StartHit(objId, *(PortVec4 *)(pos), a, b, c, scale)
 #else
 extern void EftRay_StartHit(s32 objId, Vec4 *pos, s32 a, s32 b, s32 c, f32 scale);

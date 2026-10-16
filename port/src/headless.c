@@ -173,7 +173,9 @@ int __wrap_Progress_Main(int arg) {
         /* BT3_CHARA=<id> (and BT3_COSTUME=<n>, BT3_VARIANT=1 for the damaged model): side 0's fighter of the demo
            battle, for looking at one character's model without going through the menus */
         if (getenv("BT3_CHARA") != NULL) {
-            extern struct { int chara, costume, variant; } GAME_PTR BattleSide_GetMember(int side, int index);
+            /* NOT GAME_PTR: the definition (battle_load.c) returns an ordinary pointer, so a 4-byte declaration here
+               would read the low half of the real address and rebase it a second time. */
+            extern struct { int chara, costume, variant; } *BattleSide_GetMember(int side, int index);
             BattleSide_GetMember(0, 0)->chara = atoi(getenv("BT3_CHARA"));
             BattleSide_GetMember(0, 0)->costume = getenv("BT3_COSTUME") != NULL ? atoi(getenv("BT3_COSTUME")) : 0;
             BattleSide_GetMember(0, 0)->variant = getenv("BT3_VARIANT") != NULL;

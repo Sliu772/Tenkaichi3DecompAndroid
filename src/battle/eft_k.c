@@ -92,7 +92,7 @@ extern void EftTexSet_Load32(void *tex, s32 *entry);
 extern s32 EftShot_TestBits(s32 objId, s32 bits);
 extern void EftShot_SetHeldFlagA8(s32 objId);
 extern void EftShot_Nop(s32 size);
-extern void EftEmit_LoadSet(EftKSrc *src, void *set, s32 a2, s32 *pack, s32 t0, s32 t1);
+extern void EftEmit_LoadSet(EftKSrc *src, void *set, void *a2, s32 *pack, s32 t0, s32 t1);
 extern void EftEmit_FreeSet(void *set);
 extern void EftEmit_BeginFrame(void *set);
 extern u8 EftEmit_GetHead21(void *set);
@@ -2065,7 +2065,7 @@ extern void EftTechEvt_RequestStop(s32 objId);
 #ifndef PORT
 #define EftRushShot_UpdateModels ((void (*)(EftTask *task))EftRushShot_UpdateModels)
 #endif
-extern void EftFlash_Start(EftFlashArg *arg);
+extern void *EftFlash_Start(EftFlashArg *arg);
 extern void *EftStreak_Start(s32 objId, s32 kind, s32 arg2, f32 angle);
 extern void EftDelaySe_Start(s32 objId, EftSparkTbl *tbl, s32 count);
 extern void EftObj_Destroy(s32 handle);

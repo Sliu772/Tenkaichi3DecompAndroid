@@ -45,8 +45,8 @@ extern void Flash_Play(Flash *flash, s32 arg);
 extern void Flash_GotoLabel(Flash *flash, const char *label, s32 arg);
 extern void Flash_FindLabel(Flash *flash, const char *parent, const char *name, FlashRef *out);
 extern void Flash_ClipGotoLabel(Flash *flash, FlashRef *ref, const char *label);
-extern void Flash_ClipSetCallbackA(Flash *flash, FlashRef *ref, void (*cb)(void), s32 arg);
-extern void Flash_ClipSetCallbackB(Flash *flash, FlashRef *ref, void (*cb)(void), s32 arg);
+extern void Flash_ClipSetCallbackA(Flash *flash, FlashRef *ref, void (*cb)(void), void *arg);
+extern void Flash_ClipSetCallbackB(Flash *flash, FlashRef *ref, void (*cb)(void), void *arg);
 extern void Flash_ClipSetColor(Flash *flash, FlashRef *ref, f32 v);
 extern void Flash_ClipSetUv(Flash *flash, FlashRef *ref, FlashUv *uv);
 /* text box module, after 0x2600B0 (not decompiled): draws a line in a clip */

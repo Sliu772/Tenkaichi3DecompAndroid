@@ -44,7 +44,7 @@ extern void Vec3_ScaleAdd(Vec4 *dst, Vec4 *a, Vec4 *b, f32 t);
 extern s32 BtlScene_IsCharStopped(s32 objId);
 extern f32 BtlScene_GetCharScale(s32 objId);
 extern f32 BtlScene_RandF(void);
-extern void BtlTask_CreateChildList(EftTask *task, s32 count, s32 workSize);
+extern void *BtlTask_CreateChildList(EftTask *task, s32 count, s32 workSize);
 
 extern s32 BtlCharApi_GetOpponentObjId(s32 objId);
 extern void BtlCharApi_GetNodePos(s32 objId, s32 node, Vec4 *out);
@@ -63,7 +63,7 @@ extern s32 EftShot_TestBits(s32 objId, s32 mask);
 extern void EftShot_SetHeldFlagA8(s32 objId);
 extern void EftShot_SetHeldFlagA9(s32 objId);
 extern void EftShot_Nop(s32 size);
-extern void EftEmit_LoadSet(EftTechArg *arg, void *model, s32 a2, s32 *pack, s32 a4, s32 a5);
+extern void EftEmit_LoadSet(EftTechArg *arg, void *model, void *a2, s32 *pack, s32 a4, s32 a5);
 extern void EftEmit_FreeSet(void *model);
 extern void EftEmit_BeginFrame(void *model);
 extern s32 EftEmit_GetEndFrames(EftModel *model);

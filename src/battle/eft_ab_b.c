@@ -43,7 +43,7 @@ extern s32 BtlCharApi_ObjGetAttrKind(s32 objId, u64 mask);
 extern void BtlCharApi_ObjSetMaskBit3(s32 objId);
 extern void BtlCharApi_ObjClearMaskBit3(s32 objId);
 
-extern void EftEmit_LoadSet(void *arg, EftAbSet *set, s32 a2, s32 *pack, s32 a4, s32 id);
+extern void EftEmit_LoadSet(void *arg, EftAbSet *set, void *a2, s32 *pack, s32 a4, s32 id);
 extern void EftEmit_FreeSet(EftAbSet *set);
 extern void EftEmit_BeginFrame(EftAbSet *set);
 extern s32 EftEmit_GetEndFrames(EftAbSet *set);

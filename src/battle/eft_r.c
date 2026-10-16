@@ -90,7 +90,7 @@ extern EftRSphere *EftHitArena_AllocSphere(void);
 extern void EftHit_SetShapeSpheres(EftRRec *rec, EftRSphere *a, EftRSphere *b);
 extern void ColSphere_Set(EftRSphere *sphere, EftRVec *pos, f32 radius);
 
-extern void EftEmit_LoadSet(void *arg, void *set, s32 a2, s32 *pack, s32 a4, s32 a5);
+extern void EftEmit_LoadSet(void *arg, void *set, void *a2, s32 *pack, s32 a4, s32 a5);
 extern void EftEmit_FreeSet(void *set);
 extern void EftEmit_BeginFrame(void *set);
 extern s32 EftEmit_GetEndFrames(EftRSet *set);

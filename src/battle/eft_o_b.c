@@ -97,9 +97,9 @@ extern void Vec3_Clamp(void *dst, void *src, f32 lo, f32 hi); /* clamp x, y, z *
 extern f32 EftMath_WrapAngle(f32 angle);
 extern void EftAim_Home(void *out, void *pos, void *dir, s32 objId, f32 speed, f32 maxTurn);
 
-extern void *BtlPool_GetCurrent(void);
-extern void *BtlPool_Alloc(void *pool, s32 size);
-extern void BtlPool_Free(void *pool, void *p);
+extern s32 BtlPool_GetCurrent(void);
+extern void *BtlPool_Alloc(s32 slot, s32 size);
+extern void BtlPool_Free(s32 slot, void *ptr);
 extern s32 BtlScene_IsCharStopped(s32 objId);
 extern void *BtlTask_CreateChildList(EftOTask *task, s32 count, s32 workSize);
 extern EftOTask *BtlTaskList_AddTail(void *list, void *cls, void *arg);

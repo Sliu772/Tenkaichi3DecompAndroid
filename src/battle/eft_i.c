@@ -41,7 +41,7 @@ extern s32 BtlCharApi_ObjGetParamFlags0(s32 objId);
 extern void BtlCharApi_GetNodePos(s32 objId, s32 node, Vec4 *out);
 extern f32 BtlScene_GetCharScale(s32 objId);
 extern s32 BtlScene_IsCharStopped(s32 objId);
-extern void BtlTask_CreateChildList(EftTask *task, s32 count, s32 workSize);
+extern void *BtlTask_CreateChildList(EftTask *task, s32 count, s32 workSize);
 
 /* Layer 1 services (0x14A8C0..0x14DBB8, the file before this one). */
 extern s32 EftShot_TestBits(s32 objId, s32 bit);                 /* is this effect event of the fighter raised */
@@ -54,7 +54,7 @@ extern s32 EftShot_HasTwoAttrs(s32 objId, s32 bit);                 /* does the 
 extern void EftShot_GetAttrPair(s32 objId, u64 bit, s32 *a, s32 *b); /* both nodes of the event */
 extern void EftShot_SetHeldFlagA8(s32 objId);                         /* sets the fighter's held flag 0xA8 */
 extern void EftShot_Nop(s32 size);                          /* empty */
-extern void EftEmit_LoadSet(EftOwner *owner, EftEmitSet *set, s32 a2, s32 *pack, s32 a4, s32 a5);
+extern void EftEmit_LoadSet(EftOwner *owner, EftEmitSet *set, void *a2, s32 *pack, s32 a4, s32 a5);
 extern void EftEmit_FreeSet(EftEmitSet *set);
 extern void EftEmit_BeginFrame(EftEmitSet *set);
 extern s32 EftEmit_GetEndFrames(EftEmitSet *set);                    /* frames the set keeps running after its end */

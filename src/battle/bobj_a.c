@@ -23,7 +23,7 @@ extern void Vec4_Set(Vec4 *dst, f32 x, f32 y, f32 z, f32 w);
 extern void Vec4_Copy(Vec4 *dst, Vec4 *src);
 extern void Vec3_Sub(Vec4 *dst, Vec4 *a, Vec4 *b);
 extern void Mtx_MulVec4(Vec4 *dst, Mtx44 *m, Vec4 *v);
-extern void Bpe_Decode(void *src, void *dst, s32 *size);
+extern void *Bpe_Decode(void *src, void *dst, s32 *size);
 extern f32 BtlObj_GetUnk44FC4(void);
 #ifdef PORT /* PC build: the full parameter list (see BtlObjMdl_CopyTexAlpha) */
 extern void Res_RelocateOffsets(void *out, void *base, void *hdr);
