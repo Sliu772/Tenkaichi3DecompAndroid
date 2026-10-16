@@ -67,6 +67,10 @@ IOS_MIN = os.environ.get("BT3_IOS_MIN", "15.0")
 TARGET = ([f"--target=arm64-apple-ios{IOS_MIN}", "-isysroot", str(SYSROOT)] if IOS  # SYSROOT: the iPhoneOS SDK (xcrun --sdk iphoneos --show-sdk-path)
           else [f"--target=aarch64-linux-android{API}", f"--sysroot={SYSROOT}"])
 PLAT_DEF = ["-DBT3_IOS=1"] if IOS else ["-DBT3_ANDROID=1"]
+# Which build this is: ios.yml sets BT3_BUILD to the commit and the run that compiled it, and plat_ios.c prints it at
+# start-up, so a device log names the artifact it came from. Local builds leave it unset ("dev" and the compile date).
+_build = "".join(c for c in os.environ.get("BT3_BUILD", "") if c.isascii() and (c.isalnum() or c in " ._-"))
+PLAT_DEF += [f'-DBT3_BUILD="{_build}"'] if _build else []
 SOFT = os.environ.get("BT3_SOFT", "-mabi=aapcs-soft -mgeneral-regs-only").split()  # (iOS: Darwin passes variadic arguments differently, see port/tools/ios_abi_check.sh)
 # the game's code: the flags of undefined.py's CC, for this target
 GAME = [CLANG] + TARGET + ["-std=gnu89", "-c", "-O2", "-g1", "-fno-strict-aliasing", "-ffp-contract=off", "-fcommon", "-w",

@@ -67,6 +67,7 @@ jobs:
         run: |
           set -o pipefail
           export BT3_PLATFORM=ios
+          export BT3_BUILD="run ${GITHUB_RUN_NUMBER} $(git rev-parse --short HEAD)"   # the stamp plat_ios.c prints at start-up
           export BT3_SYSROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
           export BT3_SDL3="$PWD/SDL3"
           export BT3_SKELETON=1

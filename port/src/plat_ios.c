@@ -38,6 +38,12 @@ extern int SDL_RunApp(int argc, char *argv[], int (*mainFunction)(int, char *[])
 extern bool SDL_SetHint(const char *name, const char *value);
 extern bool SDL_AddEventWatch(bool (*filter)(void *userdata, void *event), void *userdata);
 
+/* Which artifact is running: the CI passes -DBT3_BUILD (android.py, from BT3_BUILD in ios.yml) as the commit and the
+   run that built it, so a device log names the build it came from. A local build says "dev" and the compile date. */
+#ifndef BT3_BUILD
+#define BT3_BUILD "dev " __DATE__ " " __TIME__
+#endif
+
 #define WINDOW 0x100000000ULL
 
 static uintptr_t hdr(void) {
@@ -370,6 +376,7 @@ __attribute__((constructor(101))) static void Ios_Early(void) {
     end = image_end();
     fprintf(stderr, "bt3 iOS: header %p, slide 0x%lx, image 0x%llx bytes (offsets 0..0x%llx)\n", (void *)hdr(),
             (long)_dyld_get_image_vmaddr_slide(0), (unsigned long long)end, (unsigned long long)end);
+    fprintf(stderr, "bt3 iOS: build %s\n", BT3_BUILD);
     fprintf(stderr, "bt3 iOS: home %s\n", home != NULL ? home : "(none)");
     for (i = 0; i < sizeof(want) / sizeof(want[0]); i++) {
         o = find_window(end, want[i].size);
