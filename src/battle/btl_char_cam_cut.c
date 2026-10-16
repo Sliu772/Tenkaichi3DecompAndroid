@@ -251,34 +251,22 @@ void ChrCam_CalcCut(ChrCamChr *chr, Vec4 *eye, Vec4 *rot, Vec4 *target) {
         static s32 sPushed;
         static s32 sTrace;
 
-        if (height >= 1.0f && height < 1000.0f && dist > 0.1f) {
-            /* Be more permissive for transformation/closeup cuts to avoid penetrating the character */
-            s32 force = (chr->cut.unk0 == 0 && (chr->cut.unk4 == 6 || chr->cut.unk4 == 5 || chr->cut.unk4 == 4)) ? 1 : 0;
-            if (force || __builtin_fabsf(eye->y - mid) < height * 1.0f) {
-                if (sTrace < 60 && chr->cut.unk0 == 0 && chr->cut.unk4 == 6 && (cut->timer % 3) == 0) {
-                    sTrace++;
-                    Port_DiagNote("camera cut 6: eye to body (horizontal) x1000, limit x1000", (s32)(d * 1000.0f), (s32)(minR * 1000.0f));
-                    Port_DiagNote("camera cut 6: applied distance x1000, progress x1000", (s32)(dist * 1000.0f), (s32)(t * 1000.0f));
-                    Port_DiagNote("camera cut 6: cut start distance x1000, cut change x1000", (s32)(cut->valC * 1000.0f), (s32)(cut->valCDelta * 1000.0f));
-                    Port_DiagNote("camera cut 6: yaw x1000, pitch x1000", (s32)(yaw * 1000.0f), (s32)(pitch * 1000.0f));
-                    Port_DiagNote("camera cut 6: frames total, timer", cut->total, cut->timer);
+        if (height >= 1.0f && height < 1000.0f && dist > 0.5f && __builtin_fabsf(eye->y - mid) < height * 0.6f) {
+            if (sTrace < 60 && chr->cut.unk0 == 0 && chr->cut.unk4 == 6 && (cut->timer % 3) == 0) {
+                sTrace++;
+                Port_DiagNote("camera cut 6: eye to body (horizontal) x1000, limit x1000", (s32)(d * 1000.0f), (s32)(minR * 1000.0f));
+            }
+            if (d < minR) {
+                if (d < 0.01f) {
+                    dx = -Mathf_Sin(yaw);
+                    dz = -Mathf_Cos(yaw);
+                    d = 1.0f;
                 }
-                f32 pushR = minR;
-                if (force && d < pushR * 1.5f) {
-                    pushR = radius + height * 0.25f; /* stronger for transformation closes */
-                }
-                if (d < pushR) {
-                    if (d < 0.01f) {
-                        dx = -Mathf_Sin(yaw);
-                        dz = -Mathf_Cos(yaw);
-                        d = 1.0f;
-                    }
-                    eye->x = chr->body.pos.x + dx / d * pushR;
-                    eye->z = chr->body.pos.z + dz / d * pushR;
-                    if (sPushed < 40) {
-                        sPushed++;
-                        Port_DiagNote("camera clearance: eye was inside the body, distance x1000, limit x1000", (s32)(d * 1000.0f), (s32)(pushR * 1000.0f));
-                    }
+                eye->x = chr->body.pos.x + dx / d * minR;
+                eye->z = chr->body.pos.z + dz / d * minR;
+                if (sPushed < 40) {
+                    sPushed++;
+                    Port_DiagNote("camera clearance: eye was inside the body, distance x1000, limit x1000", (s32)(d * 1000.0f), (s32)(minR * 1000.0f));
                 }
             }
         }

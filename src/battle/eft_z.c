@@ -536,18 +536,37 @@ void EftBill_Update(EftZTask *task) {
     }
 #endif
 #ifdef PORT
-    /* fix79: the time (fix77) and distance (fix75) kills are gone: they ended sprites that were meant to stay (an aura that is not
-       moved every frame, a sprite far from both fighters), which is why effects vanished from the map after a few seconds. What ends
-       an endless sprite is its owner (the check above) and the owner's Term (EftEmit_TermState). Here only a bounded note is made
-       of an endless sprite that has lived 40 seconds, to name what keeps it. */
-    if ((w->flags & EFT_BILL_NO_LIFE) && !(w->flags & EFT_BILL_ENDING) && !BtlScene_IsEffectStopped(w->arg.chr, w->type)) {
-        static s32 sLongLived;
+    /* fix77: an endless sprite its owner was moving every frame and no longer moves is one the owner let go of (the emitter
+       stopped driving it without ending it): ended after 60 frames of not being moved, whatever the distance. */
+    if ((w->flags & EFT_BILL_NO_LIFE) && !(w->flags & EFT_BILL_ENDING) && w->driven) {
+        if (!BtlScene_IsEffectStopped(w->arg.chr, w->type)) {
+            w->idle++;
+        }
+        if (w->idle > 60) {
+            w->flags |= EFT_BILL_DEAD;
+            BtlTask_SetDead(task);
+            return;
+        }
+    }
 
-        if (++w->idle == 1200 && sLongLived < 24) {
-            sLongLived++;
-            Port_DiagNote("effects: long-lived endless sprite, owner object, effect type", w->arg.chr, w->type);
-            Port_DiagNote("effects: long-lived endless sprite, x z x1000", (s32)(w->arg.pos.x * 1000.0f), (s32)(w->arg.pos.z * 1000.0f));
-            Port_DiagNote("effects: long-lived endless sprite, flags, owner slot still ours (1/0/-1)", w->flags, w->ownerSlot != NULL ? (*w->ownerSlot == (void *)task) : -1);
+    /* fix75: an endless sprite far from both fighters is a stray orb: ended. */
+    if ((w->flags & EFT_BILL_NO_LIFE) && !(w->flags & EFT_BILL_ENDING)) {
+        extern f32 BtlCharApi_GetHeight(s32 objId);
+        Vec4 p0;
+        Vec4 p1;
+        f32 lim = BtlCharApi_GetHeight(0) * 3.0f;
+        f32 d0x, d0z, d1x, d1z;
+
+        if (lim >= 20.0f && lim < 5000.0f) {
+            BtlCharApi_GetPos(0, &p0);
+            BtlCharApi_GetPos(1, &p1);
+            d0x = w->arg.pos.x - p0.x; d0z = w->arg.pos.z - p0.z;
+            d1x = w->arg.pos.x - p1.x; d1z = w->arg.pos.z - p1.z;
+            if (d0x * d0x + d0z * d0z > lim * lim && d1x * d1x + d1z * d1z > lim * lim) {
+                w->flags |= EFT_BILL_DEAD;
+                BtlTask_SetDead(task);
+                return;
+            }
         }
     }
 #endif
@@ -902,6 +921,7 @@ s32 EftBill_SetPos(EftZTask *task, Vec4 *pos) {
     Vec3_Copy(V(&w->arg.pos), pos);
 #ifdef PORT
     w->driven = 1;
+    w->idle = 0;
 #endif
     return 1;
 }
