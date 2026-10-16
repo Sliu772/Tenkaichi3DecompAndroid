@@ -1551,6 +1551,25 @@ static void vk_frame_end_inner(void) {
             }
         }
     }
+#ifndef __ANDROID__
+    /* fix88: when the frame's buffer is not shown (the main target was not cleared this frame, so the block above is
+       skipped), the acquired swapchain image was submitted without being drawn: the drawable keeps whatever its last
+       use left in it, which is how a full-screen flash (Kamehameha) can stay on the screen. It is cleared to black. */
+    if (acquired && swap != NULL && !(best >= 0 && gsTargets[best].cleared)) {
+        SDL_GPUColorTargetInfo sct;
+        SDL_GPURenderPass *sp;
+
+        SDL_zero(sct);
+        sct.texture = swap;
+        sct.load_op = SDL_GPU_LOADOP_CLEAR;
+        sct.store_op = SDL_GPU_STOREOP_STORE;
+        sct.clear_color.a = 1.0f;
+        sp = SDL_BeginGPURenderPass(cmd, &sct, 1, NULL);
+        if (sp != NULL) {
+            SDL_EndGPURenderPass(sp);
+        }
+    }
+#endif
     sEndT[4] = gpu_now();
     SDL_SubmitGPUCommandBuffer(cmd);
     {   /* BT3_GS_VERBOSE: once a second, where the end of the frame spends its time */

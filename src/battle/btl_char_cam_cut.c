@@ -108,6 +108,11 @@ void ChrCam_CalcCut(ChrCamChr *chr, Vec4 *eye, Vec4 *rot, Vec4 *target) {
             } else if (frozen == 0 || other == 0) {
                 BtlCharApi_GetNodePos(id, cut->unk8C & CHRCUT_NODE_MASK, &tmp0);
             }
+#ifdef PORT
+            if (id >= 0 && !(frozen == 0 || other == 0)) {
+                Vec4_Copy(&tmp0, &cut->vecA); /* fix88: tmp0 was never written on this path (read of stack garbage); no motion */
+            }
+#endif
             Vec4_Sub(&cut->vecADelta, &tmp0, &cut->vecA);
         }
         refreshed = 1;
@@ -154,6 +159,11 @@ void ChrCam_CalcCut(ChrCamChr *chr, Vec4 *eye, Vec4 *rot, Vec4 *target) {
             } else if (frozen == 0 || other == 0) {
                 BtlCharApi_GetNodePos(id, node & CHRCUT_NODE_MASK, &tmp0);
             }
+#ifdef PORT
+            if (id >= 0 && !(frozen == 0 || other == 0)) {
+                Vec4_Copy(&tmp0, &cut->vecC); /* fix88: same, tmp0 never written on this path */
+            }
+#endif
             Vec4_Sub(&cut->vecCDelta, &tmp0, &cut->vecC);
         }
     }
@@ -184,6 +194,30 @@ void ChrCam_CalcCut(ChrCamChr *chr, Vec4 *eye, Vec4 *rot, Vec4 *target) {
     dir.y = Mathf_Sin(pitch);
     dir.z = Mathf_Cos(pitch) * Mathf_Cos(yaw);
     Vec4_Scale(&dir, &dir, dist);
+#ifdef PORT
+    {
+        /* fix88: |dir| can not be more than |dist| (sin and cos are at most 1). The log of cut 6 had the eye ~400 units from
+           the body with dist 21.6, so something in yaw, pitch or the sin / cos results was out of range: the length is bounded
+           here (a NaN also fails the test) and the values are logged once, to name the culprit next. */
+        f32 ad = __builtin_fabsf(dist);
+        f32 dl = __builtin_sqrtf(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+        static s32 sBad;
+
+        if (!(dl <= ad * 1.01f + 0.01f)) {
+            if (sBad < 12) {
+                sBad++;
+                Port_DiagNote("camera cut: dir out of range, yaw x1000, pitch x1000", (s32)(yaw * 1000.0f), (s32)(pitch * 1000.0f));
+                Port_DiagNote("camera cut: dir out of range, dist x1000, length x1000", (s32)(dist * 1000.0f), (s32)(dl * 1000.0f));
+                Port_DiagNote("camera cut: dir out of range, t x1000, timer", (s32)(t * 1000.0f), cut->timer);
+            }
+            if (dl > 0.0001f && dl < 1.0e12f) {
+                Vec4_Scale(&dir, &dir, ad / dl);
+            } else {
+                Vec4_SetZeroW1(&dir);
+            }
+        }
+    }
+#endif
 #ifdef PORT
     {
         /* fix74: the cut's own-fighter nodes (eye base node A, look node C) are read from the model's node matrices. In the
