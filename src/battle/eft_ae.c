@@ -1233,13 +1233,13 @@ static void Census_Walk(BtlTaskList *list, s32 depth) {
     }
 }
 
-static void Census_Run(void) {
+static void Census_Run(BtlTaskList *root) {
     static s32 sFrames;
     static s32 sRuns;
     s32 i;
 
     sFrames++;
-    if ((sFrames % 120) != 0 || gBtlTaskRoot == NULL) {
+    if ((sFrames % 120) != 0 || root == NULL) {
         return;
     }
     for (i = 0; i < CENSUS_CLASSES; i++) {
@@ -1247,7 +1247,7 @@ static void Census_Run(void) {
         sCensusDead[i] = 0;
     }
     sCensusTotal = 0;
-    Census_Walk(gBtlTaskRoot, 0);
+    Census_Walk(root, 0);
     sRuns++;
     Port_DiagNote("fix82 census: number, tasks alive in total", sRuns, sCensusTotal);
     for (i = 0; i < sCensusUsed; i++) {
@@ -1262,9 +1262,6 @@ static void Census_Run(void) {
 
 void BtlTaskList_UpdateRoot(void) {
     BtlTaskList_Update(gBtlTaskRoot);
-#ifdef PORT
-    Census_Run();
-#endif
 }
 
 /* Runs the update callback of every task of a list, in list order, each followed by its child list; a task
@@ -1272,6 +1269,11 @@ void BtlTaskList_UpdateRoot(void) {
 void BtlTaskList_Update(BtlTaskList *list) {
     BtlTask *task = list->head;
     BtlTask *next;
+#ifdef PORT
+    static s32 sUpdDepth; /* fix83: the battle scene calls this directly with its own root, not BtlTaskList_UpdateRoot */
+
+    sUpdDepth++;
+#endif
 
     while (task != NULL) {
         if (task->cls->update != NULL) {
@@ -1289,6 +1291,12 @@ void BtlTaskList_Update(BtlTaskList *list) {
         }
         task = next;
     }
+#ifdef PORT
+    sUpdDepth--;
+    if (sUpdDepth == 0) {
+        Census_Run(list);
+    }
+#endif
 }
 
 /* Runs the post-update callbacks, in the same order. Dead tasks are left for the next update. */
