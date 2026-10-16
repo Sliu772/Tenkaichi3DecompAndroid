@@ -1249,13 +1249,32 @@ static void Census_Run(BtlTaskList *root) {
     sCensusTotal = 0;
     Census_Walk(root, 0);
     sRuns++;
-    Port_DiagNote("eff census: number, tasks alive in total", sRuns, sCensusTotal);
+    /* fix87: the first run listed all 72 classes (144 of the 150 effect lines). Now: the first run only sets the
+       reference; later runs print a line for a total that moved by 4 or more, and for a class that moved by 2 or more
+       (or any class with a task flagged dead that is still in the list), in the effects budget so none is dropped. */
+    {
+        static s32 sTotalLast = -1000;
+        s32 moved = sCensusTotal - sTotalLast;
+
+        if (moved < 0) {
+            moved = -moved;
+        }
+        if (sRuns > 1 && moved >= 4) {
+            Port_DiagNote("eff census: run number, tasks alive in total", sRuns, sCensusTotal);
+        }
+        sTotalLast = sCensusTotal;
+    }
     for (i = 0; i < sCensusUsed; i++) {
-        if (sCensusCount[i] != sCensusLast[i]) {
+        s32 d = sCensusCount[i] - sCensusLast[i];
+
+        if (d < 0) {
+            d = -d;
+        }
+        if (sRuns > 1 && (d >= 2 || sCensusDead[i] > 0)) {
             Port_DiagNote("eff census class (offset from BtlTask_Kill): was, now", sCensusKey[i], sCensusLast[i] * 10000L + sCensusCount[i]);
             Port_DiagNote("eff census class: dead flagged, sample task x z x1000", sCensusDead[i], (long)sCensusSampleX[i] * 1000000L + sCensusSampleZ[i]);
-            sCensusLast[i] = sCensusCount[i];
         }
+        sCensusLast[i] = sCensusCount[i];
     }
 }
 #endif

@@ -196,10 +196,25 @@ static uint32_t clut_hash(uint32_t cbp, uint32_t cpsm, uint32_t count) {
 /* GS memory -> an RGBA texture for the current TEX0 (alpha as stored: 0x80 is opaque). The back end makes
    the texture and takes the decoded pixels (freed after it has uploaded them). */
 /* bring-up (iOS): why a draw would show the white texture or a flat colour, in the log (first 80 only) */
+static unsigned sFix87White; /* fix87: draws that got the white texture (cache full, budget spent, create failed) */
+static unsigned sFix87Skipped, sFix87UniDrawn; /* fix86 rule: draws not drawn; uniform-texture draws that did reach the picture */
+
 static void tex_diag(const char *why, uint64_t t0, uint32_t c) {
-    static unsigned n;
-    if (n < 80) {
-        n++;
+    static const char *sWhy[32]; /* fix87: 30 lines per reason, not 80 for all of them (one reason used them all up) */
+    static unsigned sWhyN[32], nWhy;
+    unsigned wi;
+
+    for (wi = 0; wi < nWhy && strcmp(sWhy[wi], why) != 0; wi++) {
+    }
+    if (wi == nWhy && nWhy < 32) {
+        sWhy[nWhy] = why;
+        sWhyN[nWhy++] = 0;
+    }
+    if (strstr(why, "white") != NULL) {
+        sFix87White++;
+    }
+    if (wi < nWhy && sWhyN[wi] < 30) {
+        sWhyN[wi]++;
         fprintf(stderr, "bt3 texdiag: frame %u %s: tex0 %016llx tbp %u psm %u size %ux%u cbp %u color %08x\n", gGsFrame, why, (unsigned long long)t0,
                 (unsigned)(t0 & 0x3FFF), (unsigned)((t0 >> 20) & 0x3F), 1u << ((t0 >> 26) & 15), 1u << ((t0 >> 30) & 15), (unsigned)((t0 >> 37) & 0x3FFF), c);
     }
@@ -655,6 +670,20 @@ static int draw_state(int ctx, int topo, int sprite, int vu, GsDraw *d, float *u
     float tw = (float)(1u << ((t0 >> 26) & 15)), th = (float)(1u << ((t0 >> 30) & 15));
 
     *us = *vs = 1.0f;
+    {   /* fix87: one line a second (only when something changed), so every test says whether the rule fired */
+        static unsigned sSumFrame, sSumLines, sLastSkip, sLastUni, sLastWhite;
+
+        if (gGsFrame != sSumFrame && gGsFrame % 60 == 0 && sSumLines < 400 &&
+            (sFix87Skipped != sLastSkip || sFix87UniDrawn != sLastUni || sFix87White != sLastWhite)) {
+            sSumFrame = gGsFrame;
+            sSumLines++;
+            fprintf(stderr, "bt3 texdiag: fix87 frame %u: id-texture draws skipped %u (+%u), uniform draws in the picture %u (+%u), white-texture fallbacks %u (+%u)\n",
+                    gGsFrame, sFix87Skipped, sFix87Skipped - sLastSkip, sFix87UniDrawn, sFix87UniDrawn - sLastUni, sFix87White, sFix87White - sLastWhite);
+            sLastSkip = sFix87Skipped;
+            sLastUni = sFix87UniDrawn;
+            sLastWhite = sFix87White;
+        }
+    }
     /* Passes that only make sense on the PS2's memory layout are not drawn here: they belong to full-screen
        effects that get native versions (see docs/port/README.md). Dropped:
          - drawing through a 16-bit view of the frame buffer (the "channel shuffle" between halves of a pixel),
@@ -816,8 +845,9 @@ static int draw_state(int ctx, int topo, int sprite, int vu, GsDraw *d, float *u
                byte only; on iOS the ones that end a ki charge, a Kamehameha or a transformation reach the visible picture
                with their RGB (flat red shapes left standing in the world until the camera leaves them). A draw that
                samples one of these textures and writes colour into the main frame buffer is not drawn.
-               BT3_FIX86=0 switches this off, for telling whether it is the cause. */
-            if (sLast != NULL && sLast->tex == d->tex && sLast->isuni && (sLast->uni >> 24) >= 0xF0) {
+               BT3_FIX86=0 switches the skipping off (the log lines stay), for telling whether it is the cause.
+               fix87: and every other draw of a one-colour texture that writes colour into the picture is logged. */
+            if (sLast != NULL && sLast->tex == d->tex && sLast->isuni) {
                 static int sFix86On = -1;
                 uint32_t fm = (uint32_t)(gGs.frame[ctx] >> 32);
 
@@ -826,18 +856,22 @@ static int draw_state(int ctx, int topo, int sprite, int vu, GsDraw *d, float *u
 
                     sFix86On = !(e != NULL && e[0] == '0');
                 }
-                if (sFix86On && ((fm & 0xFF) != 0xFF || (fm & 0xFF00) != 0xFF00 || (fm & 0xFF0000) != 0xFF0000) &&
+                if (((fm & 0xFF) != 0xFF || (fm & 0xFF00) != 0xFF00 || (fm & 0xFF0000) != 0xFF0000) &&
                     (uint32_t)(gGs.frame[ctx] & 0x1FF) == (uint32_t)gGsMainFbp) {
-                    static unsigned sFix86N;
+                    int idTex = (sLast->uni >> 24) >= 0xF0;
+                    unsigned *cnt = idTex ? &sFix87Skipped : &sFix87UniDrawn;
 
-                    if (sFix86N < 60 || sFix86N % 1000 == 0) {
-                        fprintf(stderr, "bt3 texdiag: fix86 skipped a draw (%u so far): frame %u tex0 %016llx color %08x fbmsk %08x alpha %016llx prim %llx vu %d\n",
-                                sFix86N + 1, gGsFrame, (unsigned long long)t0, sLast->uni, fm, (unsigned long long)gGs.alpha[ctx],
-                                (unsigned long long)prim, vu);
+                    if (*cnt < 60 || *cnt % 500 == 0) {
+                        fprintf(stderr, "bt3 texdiag: fix87 %s (%u so far): frame %u tex0 %016llx size %ux%u color %08x fbmsk %08x alpha %016llx test %016llx prim %llx sprite %d vu %d\n",
+                                idTex ? "SKIPPED a draw of an id texture" : "uniform texture drawn into the picture", *cnt + 1, gGsFrame,
+                                (unsigned long long)t0, (unsigned)tw, (unsigned)th, sLast->uni, fm, (unsigned long long)gGs.alpha[ctx],
+                                (unsigned long long)test, (unsigned long long)prim, sprite, vu);
                     }
-                    sFix86N++;
-                    gsSkipped++;
-                    return 0;
+                    (*cnt)++;
+                    if (idTex && sFix86On) {
+                        gsSkipped++;
+                        return 0;
+                    }
                 }
             }
         }
