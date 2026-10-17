@@ -1156,16 +1156,15 @@ void EftKiBlast_Init(EftRTask *task, EftRArg *arg) {
         w->flags |= EFT_KIBLAST_TYPED;
     }
     
-    // Validación de rango para asegurar que use un nodo de mano válido (0x12 a 0x2D) en lugar de la raíz (0)
+    /* Bring-up: node 0 (the model's root) was seen on device. A node outside the hand range (0x12..0x2D) is
+       replaced with the hand node so the blast does not leave from the feet. */
     if (spawnNode < 0x12 || spawnNode > 0x2D) {
-        spawnNode = 0x20; // Nodo por defecto para la mano si el argumento es inválido
+        spawnNode = 0x20;
         w->arg.node = (s16)spawnNode;
     }
 
     BtlCharApi_GetNodePos(arg->objId, spawnNode, &w->pose.start);
     BtlCharApi_GetNodePos(arg->objId, spawnNode, &w->pose.pos);
-w->pose.pos.y -= 1.5f;   // Puedes probar con valores entre 1.0f y 2.5f según prefieras
-    w->pose.start.y -= 1.5f;
     BtlCharApi_GetNodePos(arg->objId, 0x11, &w->pose.prev);
     Vec4_Copy(&w->pose.dir, &arg->dir);
     w->radius = arg->radius;
