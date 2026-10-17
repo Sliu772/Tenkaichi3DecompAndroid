@@ -197,9 +197,14 @@ void PortInput_Touch(const SDL_Event *ev) {
         memset(&sTouches[slot], 0, sizeof(sTouches[slot]));
         sTouches[slot].used = 1;
         sTouches[slot].id = ev->tfinger.fingerID;
-        sTouches[slot].stick = x < 0.45f * sTouchW && y > 0.20f * sTouchH && !on_button(x, y); /* the left thumb's side */
-        sTouches[slot].cx = x;
-        sTouches[slot].cy = y;
+        sTouches[slot].stick = x < 0.45f * sTouchW && y > 0.43f * sTouchH && !on_button(x, y);
+        if (sTouches[slot].stick) {
+            sTouches[slot].cx = 0.165f * (float)sTouchW;
+            sTouches[slot].cy = 0.550f * (float)sTouchH;
+        } else {
+            sTouches[slot].cx = x;
+            sTouches[slot].cy = y;
+        }
     }
     sTouches[slot].x = x;
     sTouches[slot].y = y;
@@ -243,9 +248,8 @@ int PortInput_TouchStick(float *rx, float *ry, float *fx, float *fy) {
             return 1;
         }
     }
-    *rx = 0.21f; /* no finger: the ring sits where the left thumb rests (a finger put down anywhere on the left
-                    side becomes the stick's centre, as the game reads it) */
-    *ry = 0.63f;
+    *rx = 0.165f;
+    *ry = 0.550f;
     *fx = *rx;
     *fy = *ry;
     return 0;
