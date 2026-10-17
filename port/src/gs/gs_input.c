@@ -70,9 +70,9 @@ static int sTouchW = 1280, sTouchH = 720;
 static const struct { unsigned bit; float x0, y0, x1, y1; } kTouches[] = {
     {B_SELECT, 0.380f, 0.03f, 0.480f, 0.15f},
     {B_START, 0.480f, 0.03f, 0.580f, 0.15f},
-    {B_L2, 0.700f, 0.265f, 0.845f, 0.370f},
+    {B_L1, 0.060f, 0.000f, 0.170f, 0.070f},
+    {B_L2, 0.180f, 0.000f, 0.290f, 0.070f},
     {B_R2, 0.855f, 0.265f, 1.000f, 0.370f},
-    {B_L1, 0.700f, 0.135f, 0.845f, 0.240f},
     {B_R1, 0.855f, 0.135f, 1.000f, 0.240f},
     {B_TRIANGLE, 0.800f, 0.400f, 0.925f, 0.555f},
     {B_CIRCLE, 0.895f, 0.575f, 1.000f, 0.730f},
