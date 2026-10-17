@@ -759,8 +759,9 @@ void EftCharRoot_Init(EftQTask *task) {
     gEftChar->list = BtlTask_CreateChildList(task, gEftChar->count, 0);
     for (i = 0; i < gEftChar->count; i++) {
         EftCharEntry *c = &gEftChar->chars[i];
+        s32 arg = i;
 
-        c->task = BtlTaskList_AddTail(gEftChar->list, gEftCharClass, (void *)i);
+        c->task = BtlTaskList_AddTail(gEftChar->list, gEftCharClass, &arg);
     }
 }
 
@@ -780,8 +781,12 @@ void EftCharRoot_Update(EftQTask *task) {
 }
 
 /* Character task init: selects the character's pool and creates the manager of every kind the character's pack
- * has. A fighter with a type 2 / type 3 ki blast gets kind 1 / 2 with another class, whatever the pack says. */
-void EftChar_Init(EftQTask *task, s32 chr) {
+ * has. A fighter with a type 2 / type 3 ki blast gets kind 1 / 2 with another class, whatever the pack says.
+ * The task arg is a POINTER to the character index, not the index cast to a pointer: on iOS (void *)chr is turned
+ * into header+chr and the init got that as its s32. A pointer to the caller's stack stays raw (AddTail runs the
+ * init before it returns). */
+void EftChar_Init(EftQTask *task, s32 *argp) {
+    s32 chr = *argp;
     EftCharEntry *c;
     s32 kind;
     s32 on;
@@ -895,7 +900,9 @@ void EftChar_Create(s32 chr) {
     EftCharEntry *c = &gEftChar->chars[chr];
 
     if (c->task == NULL) {
-        c->task = BtlTaskList_AddTail(gEftChar->list, gEftCharClass, (void *)chr);
+        s32 arg = chr;
+
+        c->task = BtlTaskList_AddTail(gEftChar->list, gEftCharClass, &arg);
     }
 }
 
@@ -922,7 +929,9 @@ EftQTask *EftCharNull_Start(s32 chr) {
     void *list = EftChar_GetList(chr, 0);
 
     if (list != NULL) {
-        return BtlTaskList_AddTail(list, gEftCharNullClass, (void *)chr);
+        s32 arg = chr;
+
+        return BtlTaskList_AddTail(list, gEftCharNullClass, &arg);
     }
 }
 
@@ -953,7 +962,8 @@ void EftCharNullMgr_Update(EftQTask *task) {
 }
 
 /* Task init. */
-void EftCharNull_Init(EftQTask *task, s32 chr) {
+void EftCharNull_Init(EftQTask *task, s32 *argp) {
+    s32 chr = *argp;
     s32 *w = task->work;
 
     *w = 0;
