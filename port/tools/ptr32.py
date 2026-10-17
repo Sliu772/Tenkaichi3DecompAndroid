@@ -69,7 +69,10 @@ def apply(data, edits):
     return b"".join(out)
 
 def parse(data, args):
-    tu = ci.Index.create().parse("in.i", args=args, unsaved_files=[("in.i", data.decode("latin-1"))])
+    # -ferror-limit=0: port/src/a11y_game.c carries 51 layout checks and every one of them fails here (the
+    # pointers of the text are still 8 bytes wide); clang would stop at the twentieth with a fatal
+    # "too many errors emitted" that hides the real ones.
+    tu = ci.Index.create().parse("in.i", args=args + ["-ferror-limit=0"], unsaved_files=[("in.i", data.decode("latin-1"))])
     # The text is parsed as written: the game's pointers are still 8 bytes wide here (the transform below makes
     # them 4), so a `_Static_assert` on a structure's layout — the port's files carry them (port/src/a11y_game.c)
     # and libclang 18 accepts `__ptr32` on arm64 without making the pointer 4 bytes — cannot hold at this stage.
