@@ -290,7 +290,12 @@ static void game_main(void) {
    game_entry, which SDL calls on the main thread once the app is up, and the game runs from there, on its stack in
    the window. */
 extern int SDL_RunApp(int argc, char *argv[], int (*mainFunction)(int, char *[]), void *reserved);
+extern void Port_IosData(void);      /* plat_ios.c: the app is up: Documents, and the disc image unpacked */
+void Port_IosLateStart(void);        /* the bottom of this file: the game's memory, deferred to here on iOS */
+
 static int game_entry(int argc, char *argv[]) {
+    Port_IosData();      /* shows its own window; minutes the first time (nothing to do if gamedata/ is there) */
+    Port_IosLateStart(); /* the constructor at the bottom of this file skips iOS for the reason given there */
     sGameStackTop = (uint8_t *)Port_Ptr(STACK_BASE + STACK_SIZE);
     gPortStage = "the game is running (on its stack in the window, through SDL's UIKit entry)";
     Port_CallOnStack(game_main, sGameStackTop);
@@ -455,8 +460,19 @@ static uint8_t *read_file(const char *path, size_t *size) {
 }
 
 static void data_fail(const char *what, const char *path) {
-    fprintf(stderr, "bt3: %s%s%s\n     The game's data comes from your own disc image; run the setup (Tenkaichi3Decomp-setup) to unpack it.\n", what,
-            path != NULL ? ": " : "", path != NULL ? path : "");
+    fprintf(stderr, "bt3: %s%s%s\n", what, path != NULL ? ": " : "", path != NULL ? path : "");
+#ifdef BT3_IOS
+    /* the install left gamedata/ behind, but what the game needs inside is not there (or is damaged): on the phone
+       the log is hard to read, so the screen says what to do; Port_IosInstall unpacks it all again */
+    {
+        extern int GsIosUi_Show(const char *a, const char *b, const char *c, const char *d, int permille, int red);
+        extern void GsIosUi_Stuck(void);
+        GsIosUi_Show("Faltan datos del juego", "La carpeta gamedata/ esta incompleta.", "Borrala en Archivos y abre la app otra vez.", NULL, -1, 1);
+        GsIosUi_Stuck(); /* without a window it returns here, and the exit below reports through the log */
+    }
+#else
+    fprintf(stderr, "     The game's data comes from your own disc image; run the setup (Tenkaichi3Decomp-setup) to unpack it.\n");
+#endif
     exit(2);
 }
 
@@ -679,7 +695,12 @@ void Port_HeapRegion(uint8_t **base, uint32_t *size) {
 static void low_region_take(void);
 #endif
 int gPortScratchpadMapped; /* gs/state.c: the scratchpad is mapped at 0x70000000 (Android: only if that was free) */
-__attribute__((constructor)) static void Port_MapMemory(void) {
+
+/* Everything this file has to do before the game runs: the game's data, the maps, the stack. The constructor below
+   calls it before main on every platform but iOS; there it is Port_IosLateStart (called from game_entry, once the
+   app is up and the user's disc image has been unpacked): a constructor runs before SDL's UIKit entry, and a launch
+   that spends minutes there is killed by iOS's watchdog. */
+static void map_memory(void) {
 #ifdef _WIN32
     /* The program only works at the address it was linked for (the game's pointers are 4 bytes and absolute). It
        carries no relocation table, so Windows has to load it there; should it be somewhere else all the same (a
@@ -774,6 +795,19 @@ __attribute__((constructor)) static void Port_MapMemory(void) {
 #endif
     gPortStage = "memory ready, before the program's main";
 }
+
+__attribute__((constructor)) static void Port_MapMemory(void) {
+#ifndef BT3_IOS
+    map_memory();
+#endif
+}
+
+#ifdef BT3_IOS
+/* game_entry's order: the app's window and the user's data first (plat_ios.c), then the game's memory. */
+void Port_IosLateStart(void) {
+    map_memory();
+}
+#endif
 
 /* The game's malloc (include/port_compat.h renames it): a bump allocator over the heap region, 16-byte aligned. */
 void *Port_Malloc(uint32_t size) {

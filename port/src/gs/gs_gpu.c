@@ -758,6 +758,7 @@ static void poll_events(void) {
 #endif
         }
         { extern void PortA11y_Event(const SDL_Event *ev); PortA11y_Event(&ev); } /* a11y.c: the repeat key and button */
+        { extern void PortInput_Touch(const SDL_Event *ev); PortInput_Touch(&ev); } /* gs_input.c: the phone's own controller */
         if (PortInput_Hotkey(&ev) || (ev.type == SDL_EVENT_KEY_DOWN && !ev.key.repeat && ev.key.key == SDLK_AC_BACK)) {
             Ui_Toggle(); /* F1, START + SELECT, or the list's key; Android: the back button (loader.c hands it over) */
             continue;

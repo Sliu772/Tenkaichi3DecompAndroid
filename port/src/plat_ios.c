@@ -1,20 +1,27 @@
 /*
  * iOS: what the game needs before its main, and what has no place in the memory layout (port/src/plat_mem.c).
  *
- *   - constructor priority 101 (before plat_mem.c's Port_MapMemory, which reads the game's data): the working folder
- *     becomes the app's Documents folder (the one the Files app shows: the user's .iso and, after the first start,
- *     gamedata/) and stdout/stderr go to Documents/bt3_log.txt (a device has no console: the log is the report).
- *   - constructor priority 102: if gamedata/ is not there yet, it is unpacked from an .iso the user copied into
- *     Documents (the log tells the progress; the screen stays black for a while).
+ *   - constructor priority 101 (before anything else): the working folder becomes the app's Documents folder (the
+ *     one the Files app shows: the user's .iso and, after the first start, gamedata/) and stdout/stderr go to
+ *     Documents/bt3_log.txt (a device has no console: the log is the report).
+ *   - Port_IosData (called by plat_mem.c's game_entry once SDL's UIKit entry is up): the working folder is set to
+ *     Documents again — SDL's own delegate moves it to the app bundle — and, while gamedata/.installed is not
+ *     there, the user's disc image is unpacked into it (plat_ios_install.c: minutes, with its own window and
+ *     progress). This cannot run in a constructor: those run before the app is up, and iOS kills a launch that
+ *     takes that long.
  */
 #ifdef BT3_IOS
-#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+int Port_IosInstall(const char *iso, const char *documents);          /* plat_ios_install.c */
+int Port_IosFindIso(const char *documents, char *out, size_t size);   /* plat_ios_install.c */
+int GsIosUi_Show(const char *a, const char *b, const char *c, const char *d, int permille, int red); /* gs_ios_ui.c */
+void GsIosUi_Stuck(void); /* gs_ios_ui.c: the message stays on the screen until the app is closed */
+void GsIosUi_Done(void);  /* gs_ios_ui.c: "ready", a moment, and the window goes away */
 
 static char sDocuments[1024]; /* the app's Documents folder ("$HOME/Documents") */
 
@@ -46,43 +53,35 @@ __attribute__((constructor(101))) static void Port_IosStart(void) {
     fflush(stdout);
 }
 
-__attribute__((constructor(102))) static void Port_IosData(void) {
+void Port_IosData(void) {
+    char path[1200], marker[1240];
     struct stat st;
-    char path[1200], name[256];
-    FILE *iso;
 
     if (sDocuments[0] == '\0') {
         return;
     }
-    snprintf(path, sizeof(path), "%s/gamedata/disc/SLUS_216.78", sDocuments);
-    if (stat(path, &st) == 0) {
-        return; /* the game's data is unpacked */
+    if (chdir(sDocuments) != 0) {
+        /* SDL's delegate moved the working folder to the bundle: everything the port opens by its relative name
+           ("gamedata/...") has to be under Documents, where the user's files are. */
+        fprintf(stderr, "bt3: cannot enter %s\n", sDocuments);
     }
-    /* The user's disc image, copied with the Files app: the first .iso in Documents. */
-    iso = NULL;
-    {
-        DIR *d = opendir(sDocuments);
-        struct dirent *e;
-        while (d != NULL && (e = readdir(d)) != NULL) {
-            size_t n = strlen(e->d_name);
-            if (n > 4 && strcasecmp(e->d_name + n - 4, ".iso") == 0) {
-                snprintf(path, sizeof(path), "%s/%s", sDocuments, e->d_name);
-                iso = fopen(path, "rb");
-                snprintf(name, sizeof(name), "%s", e->d_name);
-                break;
-            }
-        }
-        if (d != NULL) {
-            closedir(d);
-        }
+    snprintf(marker, sizeof(marker), "%s/gamedata/.installed", sDocuments);
+    if (stat(marker, &st) == 0) {
+        return; /* the game's data is unpacked (the marker is written by the end of the install, and by the PC's) */
     }
-    if (iso == NULL) {
-        fprintf(stderr, "bt3: no gamedata yet. Copy the game's disc image (.iso) into this app's folder (Files: \"On My iPhone\" > Tenkaichi3Decomp) and start again.\n");
+    if (!Port_IosFindIso(sDocuments, path, sizeof(path))) {
+        fprintf(stderr, "bt3: no gamedata yet and no disc image in %s\n", sDocuments);
+        GsIosUi_Show("Falta la ISO de Budokai Tenkaichi 3", "Copia tu .iso (region USA) a Archivos >",
+                     "En mi iPhone > Dragon Rage, y abre la app otra vez.", NULL, -1, 1);
+        GsIosUi_Stuck(); /* the user has to read it: the screen stays */
         return;
     }
-    fprintf(stderr, "bt3: unpacking the game's data from %s (once; this takes a while)\n", name);
-    fclose(iso);
-    /* (the ISO 9660 walk itself is written next: the disc's files, under gamedata/) */
-    fprintf(stderr, "bt3: (the unpacking is not in this build yet)\n");
+    fprintf(stderr, "bt3: the game's data will be unpacked from %s (once; a few minutes)\n", path);
+    if (Port_IosInstall(path, sDocuments) == 0) {
+        GsIosUi_Done();
+    } else {
+        fprintf(stderr, "bt3: the game's data could not be unpacked (see above)\n");
+        GsIosUi_Stuck(); /* plat_ios_install.c left its reason on the screen */
+    }
 }
 #endif

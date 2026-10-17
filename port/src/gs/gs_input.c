@@ -42,6 +42,151 @@ enum { B_SELECT = 0x0001, B_L3 = 0x0002, B_R3 = 0x0004, B_START = 0x0008, B_UP =
        B_LEFT = 0x0080, B_L2 = 0x0100, B_R2 = 0x0200, B_L1 = 0x0400, B_R1 = 0x0800, B_TRIANGLE = 0x1000, B_CIRCLE = 0x2000,
        B_CROSS = 0x4000, B_SQUARE = 0x8000 };
 
+#ifdef BT3_IOS
+/* The phone's controller: the screen's fingers into the same state the Android app's TouchPadView sends above
+   (Port_TouchPad). Landscape, as the game is played: the left side under the top strip is the left stick — a finger
+   put down anywhere there becomes its centre, as on-screen sticks are, and the game's own threshold turns the push
+   into directions for the menus (pad.h) — and the right side holds the buttons, L1/R1/L2/R2 and START/SELECT (both
+   together is how the settings window opens and closes: PortInput_ComboPoll reads the same state). The right stick
+   stays centred. gs_gpu.c's poll_events hands every event to PortInput_Touch, at the bottom of this block.
+   iOS alone: the Android app brings its own controller, and a Mac's trackpad also sends finger events. */
+enum { TOUCH_FINGERS = 8 };
+
+typedef struct {
+    int used;
+    int stick;          /* ...and its centre is cx, cy (where the finger was put down) */
+    SDL_FingerID id;
+    float x, y, cx, cy; /* the window's pixels */
+} Touch;
+
+static Touch sTouches[TOUCH_FINGERS];
+static int sTouchW = 1280, sTouchH = 720;
+
+/* The buttons, as rectangles of the window (fractions). The four faces are the diamond at the right, where the
+   thumb lands; L1/R1/L2/R2 and START/SELECT share the top strip. */
+static const struct { unsigned bit; float x0, y0, x1, y1; } kTouches[] = {
+    {B_SELECT, 0.380f, 0.03f, 0.480f, 0.15f},
+    {B_START, 0.480f, 0.03f, 0.580f, 0.15f},
+    {B_L1, 0.655f, 0.03f, 0.775f, 0.14f},
+    {B_R1, 0.785f, 0.03f, 0.905f, 0.14f},
+    {B_L2, 0.655f, 0.17f, 0.775f, 0.28f},
+    {B_R2, 0.785f, 0.17f, 0.905f, 0.28f},
+    {B_TRIANGLE, 0.800f, 0.400f, 0.925f, 0.555f},
+    {B_CIRCLE, 0.895f, 0.575f, 1.000f, 0.730f},
+    {B_CROSS, 0.800f, 0.745f, 0.925f, 0.900f},
+    {B_SQUARE, 0.705f, 0.575f, 0.830f, 0.730f},
+};
+
+/* All the fingers into the pad state: the buttons any of them is on, and the left stick (the first finger that is
+   on it). */
+static void touch_send(void) {
+    unsigned buttons = 0;
+    float rim = (sTouchW < sTouchH ? sTouchW : sTouchH) * 0.18f; /* a full push of the left stick, in pixels */
+    int lx = 0x80, ly = 0x80;
+    int stickDone = 0;
+    int i, j;
+
+    for (i = 0; i < TOUCH_FINGERS; i++) {
+        Touch *t = &sTouches[i];
+        if (!t->used) {
+            continue;
+        }
+        if (!t->stick) {
+            for (j = 0; j < (int)(sizeof(kTouches) / sizeof(kTouches[0])); j++) {
+                if (t->x >= kTouches[j].x0 * sTouchW && t->x <= kTouches[j].x1 * sTouchW &&
+                    t->y >= kTouches[j].y0 * sTouchH && t->y <= kTouches[j].y1 * sTouchH) {
+                    buttons |= kTouches[j].bit;
+                }
+            }
+            continue;
+        }
+        if (stickDone) {
+            continue;
+        }
+        stickDone = 1;
+        {
+            float dx = t->x - t->cx, dy = t->y - t->cy;
+            float d = sqrtf(dx * dx + dy * dy);
+            if (d > rim) { /* past the rim is still a full push */
+                dx *= rim / d;
+                dy *= rim / d;
+            }
+            if ((dx < 0.0f ? -dx : dx) > rim * 0.12f || (dy < 0.0f ? -dy : dy) > rim * 0.12f) { /* a rest, not a drift */
+                lx = (int)(128.0f + dx / rim * 127.0f);
+                ly = (int)(128.0f + dy / rim * 127.0f);
+            }
+        }
+    }
+    if (Ui_IsOpen()) { /* the settings window: the controller steps aside, as the Android app's does — but START and
+                          SELECT stay, because the two together is how the window is closed again */
+        buttons &= 0x0009u;
+        lx = ly = 0x80;
+    }
+    Port_TouchPad(buttons, lx, ly, 0x80, 0x80);
+}
+
+void PortInput_Touch(const SDL_Event *ev) {
+    SDL_Window *win;
+    float x, y;
+    int slot = -1, i;
+
+    if (ev->type != SDL_EVENT_FINGER_DOWN && ev->type != SDL_EVENT_FINGER_MOTION &&
+        ev->type != SDL_EVENT_FINGER_UP && ev->type != SDL_EVENT_FINGER_CANCELED) {
+        return;
+    }
+    win = GsDraw_Window();
+    if (win == NULL || !SDL_GetWindowSize(win, &sTouchW, &sTouchH) || sTouchW <= 0 || sTouchH <= 0) {
+        return; /* no window yet (still starting): the fingers that matter come later */
+    }
+    x = ev->tfinger.x; /* SDL hands fingers as fractions of the window (pixels, on some platforms) */
+    y = ev->tfinger.y;
+    if (x <= 1.0f && y <= 1.0f && (x != 0.0f || y != 0.0f)) {
+        x *= (float)sTouchW;
+        y *= (float)sTouchH;
+    }
+    for (i = 0; i < TOUCH_FINGERS; i++) {
+        if (sTouches[i].used && sTouches[i].id == ev->tfinger.fingerID) {
+            slot = i;
+            break;
+        }
+    }
+    if (ev->type == SDL_EVENT_FINGER_UP || ev->type == SDL_EVENT_FINGER_CANCELED) {
+        if (slot >= 0) {
+            sTouches[slot].used = 0;
+            touch_send();
+        }
+        return;
+    }
+    if (slot < 0) {
+        if (ev->type != SDL_EVENT_FINGER_DOWN) {
+            return;
+        }
+        for (i = 0; i < TOUCH_FINGERS; i++) {
+            if (!sTouches[i].used) {
+                slot = i;
+                break;
+            }
+        }
+        if (slot < 0) {
+            return; /* more fingers than places: ignored */
+        }
+        memset(&sTouches[slot], 0, sizeof(sTouches[slot]));
+        sTouches[slot].used = 1;
+        sTouches[slot].id = ev->tfinger.fingerID;
+        sTouches[slot].stick = x < 0.45f * sTouchW && y > 0.20f * sTouchH; /* the left thumb's side */
+        sTouches[slot].cx = x;
+        sTouches[slot].cy = y;
+    }
+    sTouches[slot].x = x;
+    sTouches[slot].y = y;
+    touch_send();
+}
+#else
+void PortInput_Touch(const SDL_Event *ev) {
+    (void)ev; /* iOS alone has the screen's controller (the Android app sends Port_TouchPad itself) */
+}
+#endif
+
 /* The actions in the order the settings window lists them. 16..23: left stick up, down, left, right, then right. */
 static const struct { const char *name, *label; unsigned bit; int key; int pad; } kActions[PORT_ACTIONS] = {
     {"up", "D-pad up", B_UP, SDL_SCANCODE_UP, SDL_GAMEPAD_BUTTON_DPAD_UP},
