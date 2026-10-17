@@ -19,7 +19,7 @@ def mac_placed(exe):
     text = pathlib.Path(str(exe) + ".map").read_text(errors="replace")
     files = {int(m.group(1)): m.group(2) for m in re.finditer(r"^\[\s*(\d+)\] (.*)$", text, re.M)}
     syms = text[text.index("# Symbols:"):]
-    window = int(re.search(r"^0x([0-9A-Fa-f]+)\s+0x0+\s+\[\s*\d+\] __mh_execute_header$", syms, re.M).group(1), 16) - 0x20000000
+    window = int(re.search(r"^0x([0-9A-Fa-f]+)\s+0x0+\s+\[\s*\d+\] __mh_execute_header$", syms, re.M).group(1), 16) - toolchain.PROGRAM_OFFSET
     data = re.search(r"^0x([0-9A-Fa-f]+)\s+0x([0-9A-Fa-f]+)\s+__DATA\s+__data$", text, re.M)  # (as on Linux: the .data tables only)
     d0, d1 = int(data.group(1), 16), int(data.group(1), 16) + int(data.group(2), 16)
     placed = {}
@@ -63,8 +63,8 @@ def main():
             where[p[0]] = (int(p[1]), int(p[2], 16))
         elif len(p) == 2 and p[0] == "checksum":
             checksum = int(p[1], 16)
-    placed = mac_placed(exe) if toolchain.MAC else {}
-    for l in open(str(exe) + ".map") if not toolchain.MAC else ():
+    placed = mac_placed(exe) if toolchain.APPLE else {}
+    for l in open(str(exe) + ".map") if not toolchain.APPLE else ():
         m = re.match(r"^\s*\.data\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)\s+\S*obj_data\w*/(\S+)\.o\s*$", l)
         if m and int(m.group(2), 16):
             placed[m.group(3)] = (int(m.group(1), 16), int(m.group(2), 16))
@@ -89,15 +89,15 @@ def main():
         if not off <= size < off + 16:  # (a Windows object's section is padded to its 16-byte alignment)
             raise SystemExit(f"{name}: {off} bytes in port/data, {size} in the program")
     # the mark that this program does not work without its list (gPortDataStripped, plat_mem.c)
-    secs = mac_sections(exe) if toolchain.MAC else []
-    lines = [] if toolchain.MAC else subprocess.run([PREFIX + "objdump", "-h", str(exe)], capture_output=True, text=True).stdout.splitlines()
+    secs = mac_sections(exe) if toolchain.APPLE else []
+    lines = [] if toolchain.APPLE else subprocess.run([PREFIX + "objdump", "-h", str(exe)], capture_output=True, text=True).stdout.splitlines()
     for k, l in enumerate(lines):
         m = re.match(r"\s*\d+\s+(\S+)\s+([0-9a-f]+)\s+([0-9a-f]+)\s+([0-9a-f]+)\s+([0-9a-f]+)", l)
         if m and k + 1 < len(lines) and "CONTENTS" in lines[k + 1]:
             secs.append((int(m.group(3), 16), int(m.group(5), 16), int(m.group(2), 16)))
-    flag = next((int(l.split()[0], 16) for l in subprocess.run([toolchain.llvm("llvm-nm") if toolchain.MAC else PREFIX + "nm", str(exe)],
+    flag = next((int(l.split()[0], 16) for l in subprocess.run([toolchain.llvm("llvm-nm") if toolchain.APPLE else PREFIX + "nm", str(exe)],
                                                               capture_output=True, text=True).stdout.splitlines()
-                 if l.endswith(" _gPortDataStripped" if toolchain.MAC else " gPortDataStripped")), None)
+                 if l.endswith(" _gPortDataStripped" if toolchain.APPLE else " gPortDataStripped")), None)
     off = next((o + flag - va for va, o, size in secs if flag is not None and va <= flag < va + size), None)
     if off is None:
         raise SystemExit("gPortDataStripped not found in the program's data")
@@ -111,7 +111,7 @@ def main():
         dat = out / "bt3.dat"
     prog.write_bytes(image)
     prog.chmod(0o755)
-    if toolchain.MAC:  # arm64 programs must be signed, and the mark changed their bytes: signed again (ad hoc)
+    if toolchain.APPLE:  # arm64 programs must be signed, and the mark changed their bytes: signed again (ad hoc)
         subprocess.run(["codesign", "--force", "--sign", "-", str(prog)], check=True, capture_output=True)
     dat.write_bytes(struct.pack("<4sIQ", b"BT3D", len(records), checksum) + b"".join(struct.pack("<IIII", *r) for r in records))
     print(f"{len(placed)} tables, {sum(r[3] for r in records)} bytes to fetch from the disc in {len(records)} runs; {dat.relative_to(ROOT) if dat.is_relative_to(ROOT) else dat}")

@@ -8,26 +8,29 @@ import buildkey
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 # The build variants (BT3_CC): see toolchain.py.
-from toolchain import VARIANT, WIN, MAC, BITS64, PREFIX, CLANG_TARGET, OBJ, DATA, sdl3, llvm
+from toolchain import VARIANT, WIN, MAC, IOS, APPLE, BITS64, PREFIX, CLANG_TARGET, OBJ, DATA, sdl3, llvm, TRIPLE, apple_sdl3
 
-# macOS / arm64: x86 code-generation flags have no meaning there. Software float is not a front-end option on arm64:
-# the IR is made as usual and the code generator is told there is no floating-point unit (llc -mattr, below), which
-# turns every float operation into the same calls (__addsf3 ...) and passes floats in integer registers, as
-# -msoft-float does on x86. No vectorizing, as with -mno-sse on x86: the IR keeps one float operation per source one.
+# macOS / iOS (Apple, arm64): x86 code-generation flags have no meaning there. Software float is not a front-end
+# option on arm64: the IR is made as usual and the code generator is told there is no floating-point unit
+# (llc -mattr, below), which turns every float operation into the same calls (__addsf3 ...) and passes floats in
+# integer registers, as -msoft-float does on x86. No vectorizing, as with -mno-sse on x86: the IR keeps one float
+# operation per source one.
 MAC_DROP = {"-m32", "-m64", "-msoft-float", "-mno-sse", "-mno-mmx", "-malign-double", "-fno-pic", "-msse2", "-mfpmath=sse", "-mno-x87"}
 MAC_FLAGS = ["-fno-vectorize", "-fno-slp-vectorize", "-Wno-error=return-mismatch", "-Wno-error=incompatible-function-pointer-types",
              "-Wno-error=int-conversion", "-Wno-error=incompatible-pointer-types", "-Wno-error=implicit-function-declaration", "-Wno-error=implicit-int"]
 MAC_IR = ["-Xclang", "-disable-llvm-passes"]  # the window pass sees the code as written ((u32)p is still a ptrtoint and a
 # trunc, not folded into a shift or a mask); macwin.run optimises after it
-MAC_LLC = ["-mtriple=arm64-apple-macos11", "-mattr=-fp-armv8,-neon", "-relocation-model=pic"]
+MAC_LLC = [f"-mtriple={TRIPLE}", "-mattr=-fp-armv8,-neon", "-relocation-model=pic"]
 
 def variant(cmd):
     """The command for this build variant: clang for everything built with software float, 64-bit or Windows flags."""
-    if MAC:
+    if APPLE:
         soft = "-msoft-float" in cmd
-        cc = llvm("clang++" if cmd[0] == "g++" else "clang") if soft else ("clang++" if cmd[0] == "g++" else "clang")
-        target = CLANG_TARGET if soft else ["-arch", "arm64", "-mmacosx-version-min=11.0", f"-I{os.environ.get('BT3_SDL3', '/opt/homebrew/opt/sdl3')}/include"]
-        return [cc] + target + [a for a in cmd[1:] if a not in MAC_DROP] + (["-fms-extensions"] + MAC_FLAGS if soft else [])
+        cc = llvm("clang++" if cmd[0] == "g++" else "clang")
+        flags = CLANG_TARGET if (soft or IOS) else ["-arch", "arm64", "-mmacosx-version-min=11.0"]
+        if not soft:  # the renderer, the settings window and the port's own code
+            flags += [f"-I{apple_sdl3()}/include"]
+        return [cc] + flags + [a for a in cmd[1:] if a not in MAC_DROP] + (["-fms-extensions"] + MAC_FLAGS if soft else [])
     if BITS64:
         cmd = ["-m64" if a == "-m32" else a for a in cmd if a != "-malign-double"]
     if WIN:
@@ -43,12 +46,12 @@ def variant(cmd):
     return ["clang"] + CLANG_TARGET + cmd[1:] + ["-mno-x87", "-Wno-error=return-mismatch"] + extra
 
 def run(cmd, **kw):
-    if MAC and "-msoft-float" in cmd:  # software float on arm64 is a code-generator option: through IR and llc
+    if APPLE and "-msoft-float" in cmd:  # software float on arm64 is a code-generator option: through IR and llc
         return mac_soft(variant(cmd), **kw)
     return subprocess.run(variant(cmd), **kw)
 
 def mac_soft(cmd, **kw):
-    """`clang ... src -o obj` for the macOS build's software-float code that is not the game's (the vector-library
+    """`clang ... src -o obj` for the Apple builds' software-float code that is not the game's (the vector-library
     references, src/port): IR, the window pass (port mode: no 4-byte pointers there, only the no-FPU attributes),
     then llc without a floating-point unit."""
     import macwin
@@ -60,7 +63,7 @@ def mac_soft(cmd, **kw):
     return r if r.returncode else mac_pending(ll, o, True)
 
 def mac_pending(ll, o, port):
-    """The macOS build's first step is done for this file (IR, its definitions listed): mac_finish does the rest
+    """The Apple builds' first step is done for this file (IR, its definitions listed): mac_finish does the rest
     once every file is there."""
     r = __import__("macwin").defs(ll)
     r.pending = (str(ll), str(o), port)
@@ -87,17 +90,17 @@ def compile_ee(cmd, src, o):
         return r
     i = pathlib.Path(str(o)[:-2] + ".i")
     i.write_text(eeconst.transform(r.stdout))
-    if BITS64 and (cmd[0] == "clang" or MAC) and not o.name.startswith("nl_"):  # the game's pointers: 4 bytes (not the maths library: no game text)
+    if BITS64 and (cmd[0] == "clang" or APPLE) and not o.name.startswith("nl_"):  # the game's pointers: 4 bytes (not the maths library: no game text)
         import ptr32
         std = next((a for a in cmd if a.startswith("-std=")), "-std=gnu89")
         try:
             text = ptr32.transform(str(i), ["-x", "cpp-output"] + (CLANG_TARGET or ["-m64"]) + [std, "-fms-extensions", "-w", "-Wno-error=return-mismatch"] +
                                    (["-mno-ms-bitfields"] if WIN else []) +
-                                   (["-Wno-error=return-type"] if MAC else []))  # (pip's libclang 18: the older name of return-mismatch)
+                                   (["-Wno-error=return-type"] if APPLE else []))  # (pip's libclang 18: the older name of return-mismatch)
         except RuntimeError as e:
             return subprocess.CompletedProcess(cmd, 1, "", f"ptr32: {e}\n")
         i.write_text(text, encoding="latin-1")
-    if cmd[0] == "clang" or MAC:  # no -fpreprocessed: the input is named as preprocessed, and the forced includes are dropped
+    if cmd[0] == "clang" or APPLE:  # no -fpreprocessed: the input is named as preprocessed, and the forced includes are dropped
         c2, skip = [], False
         for a in cmd:
             if skip:
@@ -106,7 +109,7 @@ def compile_ee(cmd, src, o):
                 skip = True
             else:
                 c2.append(a)
-        if MAC:  # through LLVM IR: the game's addresses become offsets in the window (macwin), then arm64 code, no FPU
+        if APPLE:  # through LLVM IR: the game's addresses become offsets in the window (macwin), then arm64 code, no FPU
             ll = pathlib.Path(str(o)[:-2] + ".ll")
             r = subprocess.run(c2 + ["-S", "-emit-llvm"] + MAC_IR + ["-x", "cpp-output", str(i), "-o", str(ll)], cwd=ROOT, capture_output=True, text=True)
             return r if r.returncode else mac_pending(ll, o, o.name.startswith(("pc_", "nl_")))
@@ -155,7 +158,7 @@ def main():
         if blank:
             (DATA / "SKELETON").write_text("built from port/data: finish with make_dat.py\n")
         for f in (sorted((ROOT / "port/data").glob("*.s")) if blank else real):
-            if MAC:  # Mach-O names and window offsets for the tables' pointers (macho.py)
+            if APPLE:  # Mach-O names and window offsets for the tables' pointers (macho.py)
                 import macho
                 m = DATA / f.name
                 m.write_text(macho.asm(f.read_text()))
@@ -205,7 +208,7 @@ def main():
                 print("FAILED shader", src.name, r.stderr[:300])
                 continue
         arrays.append(f"static const unsigned char {name}[] = {{" + ",".join(str(b) for b in spv.read_bytes()) + "};\n")
-        if MAC:  # SDL_GPU's Metal back end takes MSL: the same shader translated (bindings as numbered: SDL's Metal slots)
+        if APPLE:  # SDL_GPU's Metal back end takes MSL: the same shader translated (bindings as numbered: SDL's Metal slots)
             msl = gen / (src.name + ".msl")
             r = subprocess.run(["spirv-cross", "--msl", "--msl-version", "20100", "--msl-decoration-binding", str(spv), "--output", str(msl)],
                                capture_output=True, text=True)
@@ -292,12 +295,12 @@ def main():
     # Native Windows has a 32767-character CreateProcess limit; absolute object paths exceed it.
     argsfile = ROOT / "port/build/nm-objects.rsp"
     argsfile.write_text("\n".join('"' + p.replace('\\', '/') + '"' for p in objs))
-    out = subprocess.run([llvm("llvm-nm") if MAC else PREFIX + "nm", "-A", "@" + str(argsfile)], capture_output=True, text=True, check=True).stdout
+    out = subprocess.run([llvm("llvm-nm") if APPLE else PREFIX + "nm", "-A", "@" + str(argsfile)], capture_output=True, text=True, check=True).stdout
     for l in out.splitlines():
         m = re.match(r"\S+:\s*([0-9a-f]*)\s+(\w)\s+(\S+)$", l)
         if not m:
             continue
-        if MAC:  # Mach-O: C names with a leading underscore
+        if APPLE:  # Mach-O: C names with a leading underscore
             m = re.match(r"(\S+:\s*[0-9a-f]*\s+\w\s+)_?(\S+)$", l)
             m = re.match(r"\S+:\s*([0-9a-f]*)\s+(\w)\s+(\S+)$", m.group(1) + m.group(2))
         if m.group(2) == "U":

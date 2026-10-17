@@ -13,7 +13,7 @@ Usage: port/tools/make_state.py  (run by link.py after a successful link; BT3_CC
 import bisect, itertools, pathlib, re, sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from toolchain import OBJ, DATA, EXE, MAC
+from toolchain import OBJ, DATA, EXE, MAC, APPLE, PROGRAM_OFFSET
 
 PORT_STATE = {"headless", "mathf_pc", "plat_file", "plat_libm", "plat_mc", "plat_mem", "plat_sndstate", "plat_stub", "plat_sys", "softfloat_ps2",
               "vu0_a", "vu0_b", "gs_marker"}
@@ -33,10 +33,11 @@ def is_game(obj):
     return True
 
 def mac_map(text):
-    """ld64's map (the macOS build) lists symbols, not input sections: "address size [file] name", the files numbered
+    """ld64's map (the Apple builds) lists symbols, not input sections: "address size [file] name", the files numbered
     at the top. A game variable is a symbol of a game object in __DATA's __data, __common or __bss (not __porthst,
-    the port's PORT_HOST variables). Addresses become game addresses: offsets in the window that starts 0x20000000
-    below the program (port/src/port_addr.h). Returns (game ranges, the port's ranges, the map's text for the marks)."""
+    the port's PORT_HOST variables). Addresses become game addresses: offsets in the window that starts
+    PROGRAM_OFFSET below the program (0x20000000 on macOS, 0 on iOS; port/src/port_addr.h). Returns (game ranges,
+    the port's ranges, the map's text for the marks)."""
     files = {int(m.group(1)): m.group(2) for m in re.finditer(r"^\[\s*(\d+)\] (.*)$", text, re.M)}
     sect = text[text.index("# Sections:"):text.index("# Symbols:")]
     writable = []
@@ -46,7 +47,7 @@ def mac_map(text):
             writable.append((a, a + int(m.group(2), 16)))
     syms = text[text.index("# Symbols:"):]
     syms = syms[:syms.index("# Dead Stripped Symbols:")] if "# Dead Stripped Symbols:" in syms else syms
-    window = int(re.search(r"^0x([0-9A-Fa-f]+)\s+0x0+\s+\[\s*\d+\] __mh_execute_header$", syms, re.M).group(1), 16) - 0x20000000
+    window = int(re.search(r"^0x([0-9A-Fa-f]+)\s+0x0+\s+\[\s*\d+\] __mh_execute_header$", syms, re.M).group(1), 16) - PROGRAM_OFFSET
     ranges, others, marks = [], [], {}
     for m in re.finditer(r"^0x([0-9A-Fa-f]+)\s+0x([0-9A-Fa-f]+)\s+\[\s*(\d+)\] (\S+)$", syms, re.M):
         a, size = int(m.group(1), 16), int(m.group(2), 16)
@@ -90,7 +91,7 @@ def linux_map(text):
 
 def main():
     text = pathlib.Path(str(EXE) + ".map").read_text(errors="replace")
-    if MAC:
+    if APPLE:
         ranges, others, text = mac_map(text)
     else:
         ranges, others, text = linux_map(text)

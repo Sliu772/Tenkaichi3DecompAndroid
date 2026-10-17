@@ -1,10 +1,11 @@
-// The game's memory model on macOS / arm64, as an LLVM pass (opt -load-pass-plugin macwin.dylib -passes=bt3-window).
+// The game's memory model on Apple / arm64 (macOS, iOS), as an LLVM pass (opt -load-pass-plugin macwin.dylib
+// -passes=bt3-window).
 //
 // The game's pointers are 4 bytes wide (port/tools/ptr32.py: `__ptr32 __uptr`, address space 271). On Linux and
-// Windows they are plain addresses below 4 GB. macOS keeps the low 4 GB of every arm64 process unmapped, so here a
-// game pointer is an OFFSET into a 4 GB window instead:
+// Windows they are plain addresses below 4 GB. macOS and iOS keep the low 4 GB of every arm64 process unmapped, so
+// here a game pointer is an OFFSET into a 4 GB window instead:
 //
-//     W = &__mh_execute_header - 0x20000000
+//     W = &__mh_execute_header - PROGRAM_OFFSET    (0x20000000 on macOS, 0 on iOS: -bt3-offset, port/tools/macwin.py)
 //
 // In code, W is LOADED from the variable Port_Window (port/src/plat_mem.c) at the start of each function, never
 // written as the constant above: an address computed from a known symbol lets LLVM's alias analysis decide which
@@ -12,10 +13,12 @@
 // unrelated to everything else: stores were dropped and loads reused (seen in Ot_Init). And W + offset is made
 // with inttoptr, not as a GEP on W (see host()). Constant data keeps the constant form (it is only arithmetic there).
 //
-// The program is linked so that it starts 0x20000000 into the window, as the Linux and Windows programs start at
-// 0x20000000; the PS2's memory (heap, stack, registers, scratchpad) is mapped at W + its PS2 address
-// (port/src/plat_mem.c). An offset therefore has the same value a Linux address has, for everything the game
-// computes with: heap, stack, the port's blocks.
+// On macOS the program is linked so that it starts 0x20000000 into the window, as the Linux and Windows programs
+// start at 0x20000000, and the PS2's memory (heap, stack, registers, scratchpad) is mapped at W + its PS2 address
+// (port/src/plat_mem.c); an offset therefore has the same value a Linux address has, for everything the game
+// computes with: heap, stack, the port's blocks. On iOS the window starts at the program's own header (the system
+// slides the program on every launch, and it can be neither loaded elsewhere nor re-run without the slide), so the
+// same arithmetic works on different values and the low zones move together above the image: docs/port/ios_plan.md.
 //
 // The pass:
 //   - a 4-byte pointer used for memory (load, store, atomics, memcpy/memmove/memset, a call through it) is turned
@@ -74,11 +77,12 @@ cl::opt<bool> PortModule("bt3-port", cl::desc("a port source, not the game's"), 
 // likewise, and the call is a fixed-argument one when the definition is.
 cl::opt<std::string> Defs("bt3-defs", cl::desc("write this module's function definitions to FILE, change nothing"), cl::init(""));
 cl::opt<std::string> Sigs("bt3-sigs", cl::desc("the program's function definitions (FILE from -bt3-defs)"), cl::init(""));
+// Where the program starts in the window: 0x20000000 on macOS (it is linked there, as on Linux and Windows), 0 on
+// iOS (the window starts at the program's own header; port/tools/macwin.py, toolchain.PROGRAM_OFFSET).
+cl::opt<int64_t> ProgramOffset("bt3-offset", cl::desc("where the program starts in the game's window"), cl::init(0x20000000));
 
 constexpr unsigned GAME = 271; // __ptr32 __uptr: the game's 4-byte pointers
 constexpr unsigned HOST64 = 272; // __ptr64: ordinary 64-bit pointers (ptr32.py uses them for variadic arguments)
-constexpr int64_t PROGRAM_OFFSET = 0x20000000; // where the program starts in the window
-
 struct Window {
     Module &M;
     LLVMContext &Ctx;
@@ -102,7 +106,7 @@ struct Window {
                 mh->setVisibility(GlobalValue::HiddenVisibility);
                 mh->setDSOLocal(true);
             }
-            W = ConstantExpr::getGetElementPtr(I8, mh, ConstantInt::get(I64, -PROGRAM_OFFSET));
+            W = ConstantExpr::getGetElementPtr(I8, mh, ConstantInt::get(I64, -ProgramOffset.getValue()));
         }
         return W;
     }

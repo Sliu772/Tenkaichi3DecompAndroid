@@ -1,12 +1,15 @@
-"""The game's data tables (port/build/gen/data, port/data: GNU assembly for ELF) as assembly for the macOS build.
+"""The game's data tables (port/build/gen/data, port/data: GNU assembly for ELF) as assembly for the Apple builds
+(macOS, iOS).
 
   - C symbols carry a leading underscore in Mach-O: `name:` / `.globl name` -> `_name`;
   - `.section .data` / `.section .bss` -> `.data` / `.bss`;
   - a pointer in a table (`.long Symbol`, `.long Symbol + k`) is a game address, i.e. an offset in the window
-    (port/tools/macwin/macwin.cpp): `.long _Symbol - __mh_execute_header + 0x20000000 + k`, which the linker
-    resolves with a subtractor relocation and which stays right wherever the system loads the program."""
+    (port/tools/macwin/macwin.cpp): `.long _Symbol - __mh_execute_header + 0x20000000 + k` (PROGRAM_OFFSET; 0 on
+    iOS, where the window starts at the program's own header), which the linker resolves with a subtractor
+    relocation and which stays right wherever the system loads the program."""
 import re
 from macwin import ABS  # symbols at fixed game addresses (GNU ld --defsym in the other builds)
+from toolchain import PROGRAM_OFFSET
 
 LABEL = re.compile(r"^([A-Za-z_][\w.$]*):", re.M)
 GLOBL = re.compile(r"^(\s*\.globl\s+)([A-Za-z_][\w.$]*)", re.M)
@@ -20,5 +23,6 @@ def asm(text):
         k = f" {m.group(3)} {m.group(4)}" if m.group(3) else ""
         if m.group(2) in ABS:
             return f"{m.group(1)}{ABS[m.group(2)]:#x}{k}"
-        return f"{m.group(1)}_{m.group(2)} - __mh_execute_header + 0x20000000{k}"
+        plus = f" + {PROGRAM_OFFSET:#x}" if PROGRAM_OFFSET else ""
+        return f"{m.group(1)}_{m.group(2)} - __mh_execute_header{plus}{k}"
     return POINTER.sub(pointer, text)

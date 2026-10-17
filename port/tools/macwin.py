@@ -1,8 +1,8 @@
-"""The macOS build's step between clang and llc for the game's code (undefined.py): applies the window memory model
+"""The Apple builds' step between clang and llc for the game's code (undefined.py): applies the window memory model
 (port/tools/macwin/macwin.cpp, an LLVM pass plugin built here on first use with Homebrew's LLVM) to an .ll file in
 place. See the top of macwin.cpp."""
 import os, pathlib, re, subprocess
-from toolchain import ROOT, llvm
+from toolchain import ROOT, llvm, PROGRAM_OFFSET
 
 SRC = ROOT / "port/tools/macwin/macwin.cpp"
 PLUGIN = ROOT / "port/build/macwin.dylib"
@@ -41,7 +41,8 @@ def sigs(lls):
 
 def run(ll, port=False):
     """Second step, once SIGS lists the whole program: the pass, then LLVM's optimisations, on ll in place."""
-    opts = ["-bt3-wrap=" + ",".join(WRAP), "-bt3-abs=" + ",".join(f"{k}={v:#x}" for k, v in ABS.items()), "-bt3-sigs=" + str(SIGS)] + (["-bt3-port"] if port else [])
+    opts = ["-bt3-wrap=" + ",".join(WRAP), "-bt3-abs=" + ",".join(f"{k}={v:#x}" for k, v in ABS.items()), "-bt3-sigs=" + str(SIGS),
+            f"-bt3-offset={PROGRAM_OFFSET:#x}"] + (["-bt3-port"] if port else [])
     if os.environ.get("BT3_MACWIN_REPORT"):  # (bring-up: list host pointers made into integers)
         opts.append("-bt3-report")
     r = opt(ll, "bt3-window,default<O2>", opts + ["-S", str(ll), "-o", str(ll)])
