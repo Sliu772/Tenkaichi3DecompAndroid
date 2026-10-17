@@ -120,6 +120,11 @@ extern s32 BtlCharApi_AnyCamPriority(void);
 extern s32 BtlGame_IsFighting(void);
 extern void BtlStage_RequestChange(void);
 extern u8 *StgTint_GetWork(void);
+#ifdef PORT
+/* Diagnostic build only: every fighter's record words (btl_char_mgr.c), to see which step first reads a bad
+   object id. Remove with the hunt. */
+extern void BtlChar_DiagDump(const char *step);
+#endif
 
 /* Allocates the scene, the pool arenas and the effect subsystems, then creates the root task (0 = every layer). */
 void BtlScene_Init(s32 layerMask) {
@@ -141,6 +146,9 @@ void BtlScene_Init(s32 layerMask) {
     EftCam_Init();
     BtlScene_InitRates();
     EftSprAnim_InitPool();
+#ifdef PORT
+    BtlChar_DiagDump("BtlScene_Init: subsystems up");
+#endif
     gBtlScene->root = BtlTaskList_Create(NULL, 1, 0);
     BtlTaskList_AddFirst(gBtlScene->root, &gBtlSceneRootClass, NULL);
 }
@@ -750,6 +758,9 @@ f32 BtlScene_GetCharScale(s32 idx) {
 
 /* Init callback of the root task: creates the group list (5 tasks) and the layers. */
 void BtlSceneRoot_Init(void *task) {
+#ifdef PORT
+    BtlChar_DiagDump("BtlSceneRoot_Init: enter");
+#endif
     gBtlScene->group = BtlTask_CreateChildList(task, 5, 0);
     BtlScene_CreateLayers(gBtlScene->group);
 }
@@ -764,20 +775,38 @@ void BtlSceneRoot_Update(void) {
 
 /* Creates the layer tasks enabled in layerMask, in the order 0, 1, 2, 3, 4. */
 void BtlScene_CreateLayers(void *group) {
+#ifdef PORT
+    BtlChar_DiagDump("BtlScene_CreateLayers: enter");
+#endif
     if (gBtlScene->layerMask & 8) {
         gBtlScene->layer[0] = BtlTaskList_AddTail(gBtlScene->group, &D_002C3550, NULL);
+#ifdef PORT
+        BtlChar_DiagDump("BtlScene_CreateLayers: layer0 (mask 8) made");
+#endif
     }
     if (gBtlScene->layerMask & 4) {
         gBtlScene->layer[1] = BtlTaskList_AddTail(gBtlScene->group, &D_002C36D0, NULL);
+#ifdef PORT
+        BtlChar_DiagDump("BtlScene_CreateLayers: layer1 (mask 4) made");
+#endif
     }
     if (gBtlScene->layerMask & 2) {
         gBtlScene->layer[2] = BtlTaskList_AddTail(gBtlScene->group, &gEftCharRootClass, NULL);
+#ifdef PORT
+        BtlChar_DiagDump("BtlScene_CreateLayers: layer2 (EftChar, mask 2) made");
+#endif
     }
     if (gBtlScene->layerMask & 1) {
         gBtlScene->layer[3] = BtlTaskList_AddTail(gBtlScene->group, &gEftLayer3Class, NULL);
+#ifdef PORT
+        BtlChar_DiagDump("BtlScene_CreateLayers: layer3 (mask 1) made");
+#endif
     }
     if (gBtlScene->layerMask & 0x10) {
         gBtlScene->layer[4] = BtlTaskList_AddTail(gBtlScene->group, &D_002C35D0, NULL);
+#ifdef PORT
+        BtlChar_DiagDump("BtlScene_CreateLayers: layer4 (mask 0x10) made");
+#endif
     }
 }
 

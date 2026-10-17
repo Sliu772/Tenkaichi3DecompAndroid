@@ -7,6 +7,9 @@
 #include "sys/common.h"
 #include "sys/heap.h"
 #include "sys/save.h"
+#ifdef PORT
+#include <stdio.h> /* diagnostic build only: the crash hunt's dumps (BtlChar_DiagDump, below) */
+#endif
 
 /*
  * Fighter manager, 0x1C0058..0x1C2FF0: the roster (gBtlChars), the per-fighter reset and the whole-roster
@@ -1278,6 +1281,33 @@ void BtlChar_EndFrame(BtlMgrChr *chr) {
     BtlChar_SetStage(chr, BTL_CHR_STAGE_END);
 }
 
+#ifdef PORT
+/* Diagnostic build only (the hunt of a crash that enters battle: the first fighter's object id comes out as
+   0xAA0003E2 and the object table is indexed out of the window). Prints the two sides' object ids (what binds
+   the fighters to their objects) and the first six words of every fighter's record — player, pad, side, objId
+   and the position's first two words, so a clobber that is wider than the object id shows itself too. Called
+   from the steps of Battle_Init, of the scene's init and layer creation, and of the resets below. Remove with
+   the hunt. */
+void BtlChar_DiagDump(const char *step) {
+    s32 s0 = BattleSide_GetObjId(0), s1 = BattleSide_GetObjId(1);
+    s32 i;
+
+    fprintf(stderr, "bt3: %s: side objId %d (0x%08X) / %d (0x%08X)\n", step, (int)s0, (unsigned)s0, (int)s1,
+            (unsigned)s1);
+    if (gBtlChars == NULL) {
+        return; /* (before BtlChar_AllocAll: no fighters yet) */
+    }
+    for (i = 0; i < BtlChar_GetCount(); i++) {
+        BtlMgrChr *chr = BtlChar_Get(i);
+        u32 *w = (u32 *)chr;
+
+        fprintf(stderr, "bt3: %s: chr%d %p [00]=%08X [04]=%08X [08]=%08X [0C]=%08X [10]=%08X [14]=%08X\n", step,
+                (int)i, (void *)chr, (unsigned)w[0], (unsigned)w[1], (unsigned)w[2], (unsigned)w[3], (unsigned)w[4],
+                (unsigned)w[5]);
+    }
+}
+#endif
+
 /* Allocates the roster for `count` fighters and resets it. */
 void BtlChar_AllocAll(s32 count) {
     gBtlChars = Heap_Alloc(sizeof(BtlCharMgr), 0x20, 0, HEAP_ANY);
@@ -1297,6 +1327,9 @@ void BtlChar_AllocAll(s32 count) {
     gBtlChars->tbl[5] = FILE_TABLE(gCommonRes->data[0], 9);
     BtlChar_ResetAll();
     BtlCharSnd_Init();
+#ifdef PORT
+    BtlChar_DiagDump("BtlChar_AllocAll: after BtlCharSnd_Init");
+#endif
 }
 
 /* Frees the roster. */
@@ -1335,7 +1368,13 @@ void BtlChar_ResetAll(void) {
         chr->index = i;
         chr->pad = pad;
         BtlChar_BindObject(chr);
+#ifdef PORT
+        BtlChar_DiagDump("BtlChar_ResetAll: after BindObject");
+#endif
         BtlChar_Reset(chr);
+#ifdef PORT
+        BtlChar_DiagDump("BtlChar_ResetAll: after Reset");
+#endif
     }
 }
 

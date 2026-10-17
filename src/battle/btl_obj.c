@@ -29,6 +29,9 @@
 #include "sys/dma.h"
 #include "sys/file.h"
 #include "sys/heap.h"
+#ifdef PORT
+#include <stdio.h> /* diagnostic build only: BtlObj_Get's log of an out-of-range id (the crash hunt) */
+#endif
 
 extern void *memset(void *dst, s32 c, u32 n);
 extern f32 sqrtf(f32 x);
@@ -434,6 +437,20 @@ s32 BtlObj_FreeId(s32 id) {
 
 /* Returns the object with this id, NULL if the id is free. */
 BtlObj *BtlObj_Get(s32 id) {
+#ifdef PORT
+    /* Diagnostic build only (the crash hunt): an id outside the table would read past the window's mapping and
+       kill the process — this is the exact load the report died in. The caller is logged so the writer of the
+       bad id can be found from the log; the return of NULL keeps the game going far enough to see it. */
+    if (id < 0 || id >= BTL_OBJ_MAX) {
+        static u32 bad;
+        bad++;
+        if (bad <= 20 || bad % 1000 == 0) {
+            fprintf(stderr, "bt3: BtlObj_Get: bad id %d (0x%08X), call %u, from %p (BtlObj_Get %p)\n", (int)id,
+                    (unsigned)id, bad, __builtin_return_address(0), (void *)BtlObj_Get);
+        }
+        return NULL;
+    }
+#endif
     return gBtlObjTbl[id];
 }
 

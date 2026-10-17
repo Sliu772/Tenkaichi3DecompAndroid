@@ -66,6 +66,10 @@ extern void Battle_UpdateWork(void);
 extern void BtlChar_AllocAll(s32 sides);
 extern void BtlChar_FreeAll(void);
 extern void BtlChar_ResetAll(void);
+#ifdef PORT
+/* Diagnostic build only: every fighter's side word and object id (btl_char_mgr.c, with the crash hunt's dumps). */
+extern void BtlChar_DiagDump(const char *step);
+#endif
 
 extern void BtlCam_Init(void);
 extern void BtlCam_Term(void);
@@ -149,16 +153,49 @@ s32 Battle_Restart(void) {
 /* Loads the battle data, creates every battle subsystem, then starts the first match. */
 s32 Battle_Init(void) {
     Battle_Load();
+#ifdef PORT
+    BtlChar_DiagDump("Battle_Init 1/10: after Battle_Load"); /* diagnostic build: watch the fighters' +0xC */
+#endif
     StgFx_Init();
+#ifdef PORT
+    BtlChar_DiagDump("Battle_Init 2/10: after StgFx_Init");
+#endif
     StgModel_InitStage();
+#ifdef PORT
+    BtlChar_DiagDump("Battle_Init 3/10: after StgModel_InitStage");
+#endif
     BtlChar_AllocAll(2);
+#ifdef PORT
+    BtlChar_DiagDump("Battle_Init 4/10: after BtlChar_AllocAll");
+#endif
     BtlAiMgr_Init();
+#ifdef PORT
+    BtlChar_DiagDump("Battle_Init 5/10: after BtlAiMgr_Init");
+#endif
     BtlCam_Init();
+#ifdef PORT
+    BtlChar_DiagDump("Battle_Init 6/10: after BtlCam_Init");
+#endif
     StgNav_Init();
+#ifdef PORT
+    BtlChar_DiagDump("Battle_Init 7/10: after StgNav_Init");
+#endif
     BtlGame_Init();
+#ifdef PORT
+    BtlChar_DiagDump("Battle_Init 8/10: after BtlGame_Init");
+#endif
     Ot_Init();
+#ifdef PORT
+    BtlChar_DiagDump("Battle_Init 9/10: after Ot_Init");
+#endif
     BtlScene_Init(0);
+#ifdef PORT
+    BtlChar_DiagDump("Battle_Init 10/10: after BtlScene_Init");
+#endif
     Battle_Restart();
+#ifdef PORT
+    BtlChar_DiagDump("Battle_Init end: after Battle_Restart");
+#endif
     return 0;
 }
 

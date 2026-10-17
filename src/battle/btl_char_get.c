@@ -1,5 +1,8 @@
 #include "common.h"
 #include "battle/btl_char_get.h"
+#ifdef PORT
+#include <stdio.h> /* diagnostic build only: BtlChar_GetObj's log of an out-of-range object id (the crash hunt) */
+#endif
 
 /*
  * Battle helpers and fighter accessors: 0x1DBF20..0x1DC9A0.
@@ -202,6 +205,19 @@ BtlCharGetChr *BtlChar_FindBySide(s32 side) {
 
 /* The fighter's battle object. */
 void *BtlChar_GetObj(BtlCharGetChr *chr) {
+#ifdef PORT
+    /* Diagnostic build only (the crash hunt): the object id must be in 0..11 (BTL_OBJ_MAX, btl_obj.h). A bad one
+       is what crashes the lookup, so the fighter and the caller are logged before it is tried. */
+    if (chr->objId < 0 || chr->objId >= 12) {
+        static u32 bad;
+        bad++;
+        if (bad <= 20 || bad % 1000 == 0) {
+            fprintf(stderr, "bt3: BtlChar_GetObj: objId %d (0x%08X), call %u, chr %p player=%d side=%d, from %p\n",
+                    (int)chr->objId, (unsigned)chr->objId, bad, (void *)chr, (int)chr->player, (int)chr->side,
+                    __builtin_return_address(0));
+        }
+    }
+#endif
     return BtlObj_Get(chr->objId);
 }
 

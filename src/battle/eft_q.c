@@ -735,11 +735,19 @@ extern u8 D_002C3E00[0x18];          /* manager class used for kind 1 when the f
 void EftChar_SetPool(s32 chr);
 void EftChar_ResetPool(s32 chr);
 void EftChar_CreateKind(s32 chr, s32 kind, s32 mode);
+#ifdef PORT
+/* Diagnostic build only: the fighters' record words (btl_char_mgr.c), to see at which point inside the layer
+   the object id first reads bad. Remove with the hunt. */
+extern void BtlChar_DiagDump(const char *step);
+#endif
 
 /* Root init: selects pool 6, makes the root's work and one task per character. */
 void EftCharRoot_Init(EftQTask *task) {
     s32 i;
     s32 size;
+#ifdef PORT
+    BtlChar_DiagDump("EftCharRoot_Init: enter");
+#endif
 
     BtlPool_SetCurrent(6);
     gEftChar = BtlPool_Alloc(BtlPool_GetCurrent(), sizeof(EftCharRoot));
@@ -778,11 +786,17 @@ void EftChar_Init(EftQTask *task, s32 chr) {
     s32 kind;
     s32 on;
     s32 mode;
+#ifdef PORT
+    BtlChar_DiagDump(chr == 0 ? "EftChar_Init chr0: enter" : "EftChar_Init chr1: enter");
+#endif
 
     EftChar_SetPool(chr);
     task->step = chr;
     c = &gEftChar->chars[chr];
     c->list = BtlTask_CreateChildList(task, EFT_CHAR_KINDS, 4);
+#ifdef PORT
+    BtlChar_DiagDump(chr == 0 ? "EftChar_Init chr0: before the kind loop" : "EftChar_Init chr1: before the kind loop");
+#endif
     for (kind = 0; kind < EFT_CHAR_KINDS; kind++) {
         mode = 0;
         if (kind == 3) {
@@ -807,6 +821,9 @@ void EftChar_Init(EftQTask *task, s32 chr) {
             EftChar_CreateKind(chr, kind, mode);
         }
     }
+#ifdef PORT
+    BtlChar_DiagDump(chr == 0 ? "EftChar_Init chr0: end" : "EftChar_Init chr1: end");
+#endif
 }
 
 /* Character task term: forgets the kind lists and empties the character's pool. */
