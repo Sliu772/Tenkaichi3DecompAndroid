@@ -75,7 +75,26 @@ static const struct { unsigned bit; float x0, y0, x1, y1; } kTouches[] = {
     {B_CIRCLE, 0.895f, 0.575f, 1.000f, 0.730f},
     {B_CROSS, 0.800f, 0.745f, 0.925f, 0.900f},
     {B_SQUARE, 0.705f, 0.575f, 0.830f, 0.730f},
+    /* the d-pad: a cross at the top left, four arms of 0.07 x 0.12 around an empty middle (left of it, the stick's side
+       starts under y 0.43; see on_dpad) */
+    {B_UP, 0.130f, 0.07f, 0.200f, 0.19f},
+    {B_LEFT, 0.060f, 0.19f, 0.130f, 0.31f},
+    {B_RIGHT, 0.200f, 0.19f, 0.270f, 0.31f},
+    {B_DOWN, 0.130f, 0.31f, 0.200f, 0.43f},
 };
+
+/* 1: the point is on one of the d-pad's arms (a finger put down there is a button's, not the left stick's). */
+static int on_dpad(float x, float y) {
+    int j;
+
+    for (j = 0; j < (int)(sizeof(kTouches) / sizeof(kTouches[0])); j++) {
+        if ((kTouches[j].bit & (B_UP | B_DOWN | B_LEFT | B_RIGHT)) != 0 && x >= kTouches[j].x0 * sTouchW &&
+            x <= kTouches[j].x1 * sTouchW && y >= kTouches[j].y0 * sTouchH && y <= kTouches[j].y1 * sTouchH) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 /* All the fingers into the pad state: the buttons any of them is on, and the left stick (the first finger that is
    on it). */
@@ -173,7 +192,7 @@ void PortInput_Touch(const SDL_Event *ev) {
         memset(&sTouches[slot], 0, sizeof(sTouches[slot]));
         sTouches[slot].used = 1;
         sTouches[slot].id = ev->tfinger.fingerID;
-        sTouches[slot].stick = x < 0.45f * sTouchW && y > 0.20f * sTouchH; /* the left thumb's side */
+        sTouches[slot].stick = x < 0.45f * sTouchW && y > 0.20f * sTouchH && !on_dpad(x, y); /* the left thumb's side */
         sTouches[slot].cx = x;
         sTouches[slot].cy = y;
     }

@@ -2432,7 +2432,8 @@ static void chat_draw(void) {
 // long before this (PortInput_Touch), and no ImGui item is made here, so nothing of this takes the touch. While
 // the settings window is open, the zones besides START and SELECT are dead (gs_input.c masks them away): hidden.
 enum { T_SELECT = 0x0001, T_START = 0x0008, T_L1 = 0x0400, T_R1 = 0x0800, T_L2 = 0x0100, T_R2 = 0x0200,
-       T_TRIANGLE = 0x1000, T_CIRCLE = 0x2000, T_CROSS = 0x4000, T_SQUARE = 0x8000 };
+       T_TRIANGLE = 0x1000, T_CIRCLE = 0x2000, T_CROSS = 0x4000, T_SQUARE = 0x8000,
+       T_UP = 0x0010, T_RIGHT = 0x0020, T_DOWN = 0x0040, T_LEFT = 0x0080 };
 
 static const char *touch_label(unsigned bit) {
     switch (bit) {
@@ -2453,6 +2454,18 @@ static void touch_shape(ImDrawList *dl, unsigned bit, ImVec2 c, float r, bool on
     ImU32 col;
 
     switch (bit) {
+    case T_UP:
+    case T_DOWN:
+    case T_LEFT:
+    case T_RIGHT: { // the d-pad's arms: an arrow
+        float dx = bit == T_LEFT ? -1.0f : (bit == T_RIGHT ? 1.0f : 0.0f);
+        float dy = bit == T_UP ? -1.0f : (bit == T_DOWN ? 1.0f : 0.0f);
+        ImVec2 tip(c.x + dx * r, c.y + dy * r), base(c.x - dx * 0.6f * r, c.y - dy * 0.6f * r);
+        ImVec2 side(-dy * 0.8f * r, dx * 0.8f * r);
+        dl->AddTriangleFilled(tip, ImVec2(base.x + side.x, base.y + side.y), ImVec2(base.x - side.x, base.y - side.y),
+                              IM_COL32(255, 255, 255, a));
+        return;
+    }
     case T_TRIANGLE:
         col = IM_COL32(120, 220, 140, a);
         dl->AddTriangle(ImVec2(c.x, c.y - r), ImVec2(c.x - 0.87f * r, c.y + 0.5f * r), ImVec2(c.x + 0.87f * r, c.y + 0.5f * r), col, t);
