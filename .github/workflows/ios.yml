@@ -60,9 +60,20 @@ jobs:
           set -o pipefail
           { python3 port/tools/undefined.py && python3 port/tools/link.py && python3 port/tools/ios_app.py ; } 2>&1 | tee build.log
 
+      - name: No skipped files
+        run: |
+          # A file the engine could not compile is not a build error yet (link.py fills its symbols with stubs),
+          # but such a program is broken: it must fail here, before the .ipa is offered.
+          if grep -q '^FAILED' build.log; then
+            echo "::error::the build skipped files; their code would be stubs in the .ipa"
+            grep '^FAILED' build.log | head -40
+            exit 1
+          fi
+
       - name: The app
         run: |
           file port/build/bt3_ios
+          vtool -show-build port/build/bt3_ios
           plutil -p port/build/ios/Payload/DragonRage.app/Info.plist
           unzip -l port/build/ios/DragonRage.ipa
           echo "still stubbed (head):"; head -20 port/build/stubs.txt

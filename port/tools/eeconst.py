@@ -67,9 +67,10 @@ def parse_hexf(t):
     m = re.match(r"0[xX]([0-9a-fA-F]+)p([+-]?\d+)", t)
     return K(Fraction(int(m.group(1), 16)) * Fraction(2) ** int(m.group(2)), 'f' if isf else 'd')
 
-# `introduced=10.8` in Apple's availability attributes (the macOS SDK's headers) is a version, not a number.
-# Only the macOS build has such headers: the other builds read their text exactly as before.
-VERSION_KEYS = {"introduced", "deprecated", "obsoleted"} if os.environ.get("BT3_CC") == "mac64" else set()
+# `introduced=10.8` in Apple's availability attributes (the Apple SDK's headers) is a version, not a number.
+# Both Apple builds read those headers: the iOS one (ios64) sees them too, through the iPhoneOS SDK. The other
+# builds read their text exactly as before.
+VERSION_KEYS = {"introduced", "deprecated", "obsoleted"} if os.environ.get("BT3_CC") in ("mac64", "ios64") else set()
 
 def lex(text):
     out = []

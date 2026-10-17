@@ -167,7 +167,7 @@ def main():
             else:
                 r = subprocess.run([PREFIX + "as"] + ([] if WIN else ["--64"]) + [str(f), "-o", str(DATA / (f.name[:-2] + ".o"))], capture_output=True, text=True)
             if r.returncode:
-                print("FAILED", f.name, r.stderr.splitlines()[0][:150])
+                print("FAILED", f.name, next((l for l in r.stderr.splitlines() if "rror" in l or l.startswith("ptr32")), r.stderr.strip()[:150])[:200])
         objs += [str(o) for o in sorted(DATA.glob("*.o"))]
     else:
         objs += [str(o) for o in sorted((ROOT / "port/build/obj_data").glob("*.o"))]  # from gen_data.py
@@ -178,7 +178,7 @@ def main():
                         "-malign-double", "-fno-strict-aliasing", "-ffp-contract=off", "-fno-builtin", "-w",
                         "-Iport/include", f"-I{f.parent}", "-include", "newlib_shim.h"], f, o)
         if r.returncode:
-            print("FAILED", f.name, r.stderr.splitlines()[0][:150])
+            print("FAILED", f.name, next((l for l in r.stderr.splitlines() if "rror" in l or l.startswith("ptr32")), r.stderr.strip()[:150])[:200])
         else:
             objs.append(str(o))
             if getattr(r, "pending", None):
@@ -278,7 +278,7 @@ def main():
         else:
             r = run(cmd + [str(f), "-o", str(o)], cwd=ROOT, capture_output=True, text=True)
         if r.returncode:
-            print("FAILED", f.name, r.stderr.splitlines()[0][:150])
+            print("FAILED", f.name, next((l for l in r.stderr.splitlines() if "rror" in l or l.startswith("ptr32")), r.stderr.strip()[:150])[:200])
         else:
             objs.append(str(o))
             if getattr(r, "pending", None):
