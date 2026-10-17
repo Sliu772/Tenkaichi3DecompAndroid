@@ -922,11 +922,23 @@ void Gs_Gif(const uint8_t *p, uint32_t qwc) {
 /* One run of VIF data (32-bit words): GIF data (DIRECT) goes to the GS, everything else to VU1 (gs_vu1.c).
    A command's data may continue in the next run (the command word often sits in the DMA tag, its data behind):
    DIRECT data is passed on as it comes, the data of the other commands is collected first. */
+static int sVifReset; /* set by vif_drop: the next run starts from nothing */
+
+/* Forgets the command a run left waiting for its data. A list that has to be abandoned (a tag that names no data)
+   must not leave that state behind: the next list's first words would be taken as its continuation. */
+static void vif_drop(void) {
+    sVifReset = 1;
+}
+
 static void vif(const uint32_t *w, uint32_t count) {
     static uint32_t direct;                    /* quadwords of GIF data still to come */
     static uint32_t pend, need, have, buf[2048]; /* a command waiting for `need` words of data */
     uint32_t i = 0;
 
+    if (sVifReset) {
+        direct = pend = need = have = 0;
+        sVifReset = 0;
+    }
     while (i < count) {
         uint32_t code, cmd, num, imm;
 
@@ -1384,6 +1396,30 @@ void Port_GsVif1Chain(uint32_t tadr, int tte) {
     }
 }
 
+/* The last resort against a list that names no data (the game has no capacity check on it: the cursor can run past
+   the buffer and the walk then reads the heap as tags — on Windows that is usually a lone END tag, on iOS it looked
+   like a REF with address 0). The tag and where it sits among the buffers are reported; the list is abandoned. */
+static void list_bad(uint32_t tadr, const uint32_t *tag) {
+    extern void Dma_DiagList(int *idx, uint32_t *cur, uint32_t *start, uint32_t *end); /* sys/dma.c */
+    static unsigned shown;
+    int idx = 0;
+    uint32_t cur = 0, start = 0, end = 0;
+
+    if (shown++ >= 8) {
+        return;
+    }
+    if (tag != NULL) {
+        fprintf(stderr, "bt3: gs: frame %u: a DMA tag names no data: id %u qwc %u addr %08x, words %08x %08x %08x %08x\n",
+                sFrame, (unsigned)((tag[0] >> 28) & 7), (unsigned)(tag[0] & 0xFFFF), (unsigned)tag[1], tag[0], tag[1], tag[2], tag[3]);
+    } else {
+        fprintf(stderr, "bt3: gs: frame %u: a DMA chain starts at 0\n", sFrame);
+    }
+    Dma_DiagList(&idx, &cur, &start, &end);
+    fprintf(stderr, "bt3: gs: frame %u: list %d is %08x..%08x with its cursor at %08x: the tag at %08x is %s\n", sFrame, idx,
+            (unsigned)start, (unsigned)end, (unsigned)cur, (unsigned)tadr,
+            (tadr >= start && tadr < end) ? "inside it" : "NOT in it");
+}
+
 /* Executes one frame's list: the DMA chain at `tadr` on VIF1, then the end-of-frame work of the back end. */
 static void run_chain(uint32_t tadr, int tte) {
     uint32_t stack[2], sp = 0;
@@ -1391,10 +1427,19 @@ static void run_chain(uint32_t tadr, int tte) {
 
     for (guard = 0; guard < 100000; guard++) {
         const uint32_t *tag = (const uint32_t *)Port_Ptr(tadr);
-        uint32_t qwc = tag[0] & 0xFFFF, id = (tag[0] >> 28) & 7, addr = tag[1]; /* a game address: all 32 bits */
+        uint32_t at = tadr; /* where the tag is (the switch moves `tadr` on) */
+        uint32_t qwc, id, addr; /* addr is a game address: all 32 bits */
         const uint32_t *data;
         int end = 0;
 
+        if (tag == NULL) { /* the chain's address is 0: nothing of this list can be trusted */
+            list_bad(at, NULL);
+            vif_drop();
+            break;
+        }
+        qwc = tag[0] & 0xFFFF;
+        id = (tag[0] >> 28) & 7;
+        addr = tag[1];
         switch (id) {
         case 0: data = (const uint32_t *)Port_Ptr(addr); end = 1; break;                 /* REFE */
         case 1: data = tag + 4; tadr += 16 + qwc * 16; break;                             /* CNT */
@@ -1403,6 +1448,11 @@ static void run_chain(uint32_t tadr, int tte) {
         case 5: data = tag + 4; if (sp < 2) { stack[sp++] = tadr + 16 + qwc * 16; } tadr = addr; break; /* CALL */
         case 6: data = tag + 4; if (sp > 0) { tadr = stack[--sp]; } else { end = 1; } break;          /* RET */
         default: data = tag + 4; end = 1; break;                                          /* END */
+        }
+        if (data == NULL) { /* a REF/REFE whose address is 0: the port keeps NULL as NULL, so it names no data */
+            list_bad(at, tag);
+            vif_drop();
+            break;
         }
         if (sDumpFrame == (int)sFrame) {
             fprintf(stderr, "  dma tag at %08x: id %u qwc %u addr %08x | %08x %08x (depth %u)\n", (unsigned)Port_Addr(tag), id, qwc, addr, tag[2], tag[3], sp);

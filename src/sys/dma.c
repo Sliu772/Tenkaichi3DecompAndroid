@@ -1,6 +1,9 @@
 #include "common.h"
 #include "sys/dma.h"
 #include "sys/heap.h"
+#ifdef PORT
+#include <stdio.h> /* diagnostic build only: the notes below */
+#endif
 
 /* libc */
 extern void *memcpy(void *dst, const void *src, u32 size);
@@ -17,6 +20,43 @@ extern s32 gDmaBufIdx;
 extern u32 *gDmaCur;
 extern s32 gDmaVif1Started;
 
+#ifdef PORT
+/* The original has no check on the display list's capacity: past the end of a buffer the bump cursor runs into
+   whatever follows it in the heap and the VIF walk then reads that memory as DMA tags. On Windows those words are
+   usually a lone END tag and the frame just ends early; on iOS they looked like a REF tag with address 0 and the
+   battle died in vif (EftChar crash of 2026-10-17, log of run 05:42). So a packet that does not fit is dropped
+   here, and the first overflows are named in the log. */
+#define DMA_TAIL_RESERVE 0x100 /* always left free so that Dma_Flush can close the list */
+static u32 sDmaScratch[0x8000]; /* 128 KB: where a packet goes that no longer fits in the list */
+static unsigned sDmaNotes;      /* notes written so far (the log is on the device) */
+
+/* 1 = `size` more bytes fit in the current list (keeping room for the closing packet). */
+static int Dma_Fits(u32 size) {
+    return (u32)gDmaCur + size + DMA_TAIL_RESERVE <= gDmaBufEnd[gDmaBufIdx];
+}
+
+/* A note, from the first 16 on every 1000th (a full list repeats once per frame). */
+static void Dma_Note(const char *what, long a, long b) {
+    if (sDmaNotes++ < 16 || sDmaNotes % 1000 == 0) {
+        fprintf(stderr, "bt3: dma: %s: %ld %ld (list %d, used %u of %u)\n", what, a, b, (int)gDmaBufIdx,
+                (unsigned)((u32)gDmaCur - gDmaBuf[gDmaBufIdx]), (unsigned)(gDmaBufEnd[gDmaBufIdx] - gDmaBuf[gDmaBufIdx]));
+    }
+}
+
+/* An upload is a BITBLT packet (Dma_AddData) followed by a REF tag with its pixels. A REF that names data which
+   cannot exist (a texture entry whose pointer or size was overwritten) is dropped, and the packet in front of it
+   is taken back with it: left alone, the GS would start an image transfer and read the next words of the list as
+   pixels. Address 0 is one of those: the port keeps NULL as NULL (port_addr.h), so a REF to 0 has no data. */
+static u32 *sDmaLastData; /* where the last Dma_AddData packet starts */
+static s32 sDmaLastDataSize;
+static int Dma_RefValid(void *addr, s32 size) {
+    if (size < 0 || size / 16 > 0xFFFF) {
+        return 0;
+    }
+    return !(size != 0 && (u32)addr == 0);
+}
+#endif
+
 /* Allocates the two 1 MB display-list buffers and points the write cursor at the first. */
 void Dma_InitBuffers(void) {
     gDmaBuf[0] = (u32)Heap_Alloc(DMA_BUF_SIZE, 0x20, 0, HEAP_ANY);
@@ -30,6 +70,14 @@ void Dma_InitBuffers(void) {
 
 /* Copies `size` bytes (whole quadwords) of ready-made packet data to the display list. */
 void Dma_AddData(void *src, s32 size) {
+#ifdef PORT
+    if (!Dma_Fits((u32)size)) {
+        Dma_Note("list full in AddData, used/size", (long)((u32)gDmaCur - gDmaBuf[gDmaBufIdx]), (long)size);
+        return;
+    }
+    sDmaLastData = gDmaCur;
+    sDmaLastDataSize = size / 16 * 16;
+#endif
     memcpy(gDmaCur, src, size);
     gDmaCur = (u32 *)((u8 *)gDmaCur + size / 16 * 16);
 }
@@ -37,6 +85,28 @@ void Dma_AddData(void *src, s32 size) {
 /* Appends a REF tag: sends `size` bytes that live at `addr` without copying them. */
 void Dma_AddRef(void *addr, s32 size) {
     u32 *tag = gDmaCur;
+
+#ifdef PORT
+    if (!Dma_Fits(16)) {
+        Dma_Note("list full in AddRef, used/size", (long)((u32)gDmaCur - gDmaBuf[gDmaBufIdx]), 16);
+        return;
+    }
+    if (!Dma_RefValid(addr, size)) {
+        int tookBack = 0;
+
+        if (sDmaLastData != NULL && sDmaLastDataSize > 0 && sDmaLastDataSize <= 0x60 &&
+            (u32 *)((u8 *)sDmaLastData + sDmaLastDataSize) == gDmaCur) {
+            gDmaCur = sDmaLastData; /* the BITBLT packet that announced this upload */
+            tookBack = 1;
+        }
+        sDmaLastData = NULL;
+        Dma_Note("REF dropped (size, address), packet taken back", (long)size, (long)(u32)addr);
+        Dma_Note("REF dropped: caller offset from Dma_AddRef, taken back",
+                 (long)((u8 *)__builtin_return_address(0) - (u8 *)&Dma_AddRef), (long)tookBack);
+        return;
+    }
+    sDmaLastData = NULL;
+#endif
 
     tag[0] = DMA_TAG_REF + size / 16;
     tag[1] = (u32)addr;
@@ -50,6 +120,13 @@ void Dma_AddRef(void *addr, s32 size) {
 void Dma_AddNext(void *addr, u32 *retTag) {
     u32 *tag = gDmaCur;
 
+#ifdef PORT
+    if (!Dma_Fits(16)) {
+        Dma_Note("list full in AddNext, used/size", (long)((u32)gDmaCur - gDmaBuf[gDmaBufIdx]), 16);
+        retTag[1] = (u32)tag; /* nothing follows: the return tag points at the cursor */
+        return;
+    }
+#endif
     tag[0] = DMA_TAG_NEXT;
     tag[1] = (u32)addr;
     tag[2] = 0;
@@ -87,6 +164,15 @@ void Dma_Flush(void) {
 void *Dma_Alloc(s32 size) {
     u32 *p = gDmaCur;
 
+#ifdef PORT
+    if (size < 0 || !Dma_Fits((u32)size)) { /* the packet is written, but into scratch memory: it is not in the list */
+        Dma_Note("list full in Alloc, used/size", (long)((u32)gDmaCur - gDmaBuf[gDmaBufIdx]), (long)size);
+        if ((u32)size > sizeof(sDmaScratch)) {
+            size = (s32)sizeof(sDmaScratch);
+        }
+        return sDmaScratch;
+    }
+#endif
     gDmaCur = (u32 *)((u8 *)gDmaCur + size / 16 * 16);
     return p;
 }
@@ -96,6 +182,10 @@ u64 *Dma_BeginDirect(void) {
     u128 *tag = (u128 *)gDmaCur;
 
 #ifdef PORT
+    if (!Dma_Fits(0x2000)) { /* a direct packet is built in place: if it might not fit it is built in scratch memory */
+        Dma_Note("list full in BeginDirect, used/size", (long)((u32)gDmaCur - gDmaBuf[gDmaBufIdx]), 0x2000);
+        tag = (u128 *)sDmaScratch;
+    }
     tag->lo = 0;
     tag->hi = 0;
 #else
@@ -109,6 +199,11 @@ void Dma_EndDirect(u64 *end) {
     u32 *tag = gDmaCur;
     s32 qwc;
 
+#ifdef PORT
+    if ((u32)end > (u32)sDmaScratch && (u32)end <= (u32)sDmaScratch + sizeof(sDmaScratch)) { /* built in scratch (BeginDirect): not added */
+        return;
+    }
+#endif
     if ((u32 *)end != tag + 4) {
         qwc = (((u8 *)end - (u8 *)tag) >> 4) - 1;
         tag[0] = DMA_TAG_CNT | qwc;
@@ -132,6 +227,25 @@ void Dma_ResetBuffers(void) {
     ((u32 *)gDmaBuf[1])[3] = 0;
     gDmaCur = (u32 *)gDmaBuf[gDmaBufIdx];
 }
+
+#ifdef PORT
+/* For the port's own logs (gs_core.c): which list is being built and how far it got. `cur` is where the next
+   packet would go: when it is past `end`, the walk of that list is reading memory that is not the list. */
+void Dma_DiagList(s32 *idx, u32 *cur, u32 *start, u32 *end) {
+    if (idx != NULL) {
+        *idx = gDmaBufIdx;
+    }
+    if (cur != NULL) {
+        *cur = (u32)gDmaCur;
+    }
+    if (start != NULL) {
+        *start = gDmaBuf[gDmaBufIdx];
+    }
+    if (end != NULL) {
+        *end = gDmaBufEnd[gDmaBufIdx];
+    }
+}
+#endif
 
 /* Returns the usable size of one display-list buffer. */
 s32 Dma_GetBufSize(void) {
