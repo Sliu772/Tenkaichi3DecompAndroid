@@ -46,8 +46,9 @@ enum { B_SELECT = 0x0001, B_L3 = 0x0002, B_R3 = 0x0004, B_START = 0x0008, B_UP =
 /* The phone's controller: the screen's fingers into the same state the Android app's TouchPadView sends above
    (Port_TouchPad). Landscape, as the game is played: the left side under the top strip is the left stick — a finger
    put down anywhere there becomes its centre, as on-screen sticks are, and the game's own threshold turns the push
-   into directions for the menus (pad.h) — and the right side holds the buttons, L1/R1/L2/R2 and START/SELECT (both
-   together is how the settings window opens and closes: PortInput_ComboPoll reads the same state). The right stick
+   into directions for the menus (pad.h) — and the right side holds the buttons: the faces, the two shoulder rows
+   (L1/R1, L2/R2) over them, R3 beside them, and START/SELECT in the top strip (both together is how the settings
+   window opens and closes: PortInput_ComboPoll reads the same state); L3 sits beside the d-pad. The right stick
    stays centred. gs_gpu.c's poll_events hands every event to PortInput_Touch, at the bottom of this block.
    iOS alone: the Android app brings its own controller, and a Mac's trackpad also sends finger events. */
 enum { TOUCH_FINGERS = 8 };
@@ -63,33 +64,37 @@ static Touch sTouches[TOUCH_FINGERS];
 static int sTouchW = 1280, sTouchH = 720;
 
 /* The buttons, as rectangles of the window (fractions). The four faces are the diamond at the right, where the
-   thumb lands; L1/R1/L2/R2 and START/SELECT share the top strip. */
+   thumb lands; the shoulders sit in two rows just above it, inside the same thumb's reach (in a fight the pair
+   nearest the faces — L2/R2 — is the one held down: guard and ki), and the stick's clicks (L3/R3) sit beside the
+   cluster they belong to. START/SELECT keep the top strip, out of the way of both thumbs. */
 static const struct { unsigned bit; float x0, y0, x1, y1; } kTouches[] = {
     {B_SELECT, 0.380f, 0.03f, 0.480f, 0.15f},
     {B_START, 0.480f, 0.03f, 0.580f, 0.15f},
-    {B_L1, 0.655f, 0.03f, 0.775f, 0.14f},
-    {B_R1, 0.785f, 0.03f, 0.905f, 0.14f},
-    {B_L2, 0.655f, 0.17f, 0.775f, 0.28f},
-    {B_R2, 0.785f, 0.17f, 0.905f, 0.28f},
+    {B_L2, 0.700f, 0.265f, 0.845f, 0.370f},
+    {B_R2, 0.855f, 0.265f, 1.000f, 0.370f},
+    {B_L1, 0.700f, 0.135f, 0.845f, 0.240f},
+    {B_R1, 0.855f, 0.135f, 1.000f, 0.240f},
     {B_TRIANGLE, 0.800f, 0.400f, 0.925f, 0.555f},
     {B_CIRCLE, 0.895f, 0.575f, 1.000f, 0.730f},
     {B_CROSS, 0.800f, 0.745f, 0.925f, 0.900f},
     {B_SQUARE, 0.705f, 0.575f, 0.830f, 0.730f},
+    {B_R3, 0.610f, 0.575f, 0.690f, 0.730f}, /* the right stick's click, inside the diamond's reach */
     /* the d-pad: a cross at the top left, four arms of 0.07 x 0.12 around an empty middle (left of it, the stick's side
-       starts under y 0.43; see on_dpad) */
+       starts under y 0.43; see on_button), and L3 beside its right arm */
     {B_UP, 0.130f, 0.07f, 0.200f, 0.19f},
     {B_LEFT, 0.060f, 0.19f, 0.130f, 0.31f},
     {B_RIGHT, 0.200f, 0.19f, 0.270f, 0.31f},
     {B_DOWN, 0.130f, 0.31f, 0.200f, 0.43f},
+    {B_L3, 0.285f, 0.190f, 0.370f, 0.310f}, /* the left stick's click, beside the d-pad */
 };
 
-/* 1: the point is on one of the d-pad's arms (a finger put down there is a button's, not the left stick's). */
-static int on_dpad(float x, float y) {
+/* 1: the point is on one of the buttons (a finger put down there is a button's, not the left stick's). */
+static int on_button(float x, float y) {
     int j;
 
     for (j = 0; j < (int)(sizeof(kTouches) / sizeof(kTouches[0])); j++) {
-        if ((kTouches[j].bit & (B_UP | B_DOWN | B_LEFT | B_RIGHT)) != 0 && x >= kTouches[j].x0 * sTouchW &&
-            x <= kTouches[j].x1 * sTouchW && y >= kTouches[j].y0 * sTouchH && y <= kTouches[j].y1 * sTouchH) {
+        if (x >= kTouches[j].x0 * sTouchW && x <= kTouches[j].x1 * sTouchW && y >= kTouches[j].y0 * sTouchH &&
+            y <= kTouches[j].y1 * sTouchH) {
             return 1;
         }
     }
@@ -192,7 +197,7 @@ void PortInput_Touch(const SDL_Event *ev) {
         memset(&sTouches[slot], 0, sizeof(sTouches[slot]));
         sTouches[slot].used = 1;
         sTouches[slot].id = ev->tfinger.fingerID;
-        sTouches[slot].stick = x < 0.45f * sTouchW && y > 0.20f * sTouchH && !on_dpad(x, y); /* the left thumb's side */
+        sTouches[slot].stick = x < 0.45f * sTouchW && y > 0.20f * sTouchH && !on_button(x, y); /* the left thumb's side */
         sTouches[slot].cx = x;
         sTouches[slot].cy = y;
     }

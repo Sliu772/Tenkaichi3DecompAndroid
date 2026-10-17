@@ -2431,14 +2431,16 @@ static void chat_draw(void) {
 // lit while a finger is on it, and the left stick's ring and ball. Drawing alone: the fingers reached the game
 // long before this (PortInput_Touch), and no ImGui item is made here, so nothing of this takes the touch. While
 // the settings window is open, the zones besides START and SELECT are dead (gs_input.c masks them away): hidden.
-enum { T_SELECT = 0x0001, T_START = 0x0008, T_L1 = 0x0400, T_R1 = 0x0800, T_L2 = 0x0100, T_R2 = 0x0200,
-       T_TRIANGLE = 0x1000, T_CIRCLE = 0x2000, T_CROSS = 0x4000, T_SQUARE = 0x8000,
+enum { T_SELECT = 0x0001, T_L3 = 0x0002, T_R3 = 0x0004, T_START = 0x0008, T_L1 = 0x0400, T_R1 = 0x0800,
+       T_L2 = 0x0100, T_R2 = 0x0200, T_TRIANGLE = 0x1000, T_CIRCLE = 0x2000, T_CROSS = 0x4000, T_SQUARE = 0x8000,
        T_UP = 0x0010, T_RIGHT = 0x0020, T_DOWN = 0x0040, T_LEFT = 0x0080 };
 
 static const char *touch_label(unsigned bit) {
     switch (bit) {
     case T_SELECT: return "SELECT";
     case T_START: return "START";
+    case T_L3: return "L3";
+    case T_R3: return "R3";
     case T_L1: return "L1";
     case T_R1: return "R1";
     case T_L2: return "L2";

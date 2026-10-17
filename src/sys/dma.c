@@ -245,6 +245,20 @@ void Dma_DiagList(s32 *idx, u32 *cur, u32 *start, u32 *end) {
         *end = gDmaBufEnd[gDmaBufIdx];
     }
 }
+
+/* 1 = `addr` is inside one of the two display-list buffers: the only places a list may link to. The game builds
+   every chain it points at with Dma_Alloc, so a destination outside them is not a chain but whatever the heap
+   holds there (the walk of a list took it for tags: log of run of 2026-10-17 05:42). */
+int Dma_DiagInLists(u32 addr) {
+    int i;
+
+    for (i = 0; i < 2; i++) {
+        if (gDmaBuf[i] != 0 && addr >= gDmaBuf[i] && addr < gDmaBufEnd[i]) {
+            return 1;
+        }
+    }
+    return 0;
+}
 #endif
 
 /* Returns the usable size of one display-list buffer. */

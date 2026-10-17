@@ -2017,8 +2017,10 @@ extern void EftTechEvt_RequestStop(s32 objId);
 #define EftRushShot_CreateModels ((void (*)(EftTask *task))EftRushShot_CreateModels)
 #define EftRushShot_UpdateModels ((void (*)(EftTask *task))EftRushShot_UpdateModels)
 extern void EftFlash_Start(EftFlashArg *arg);
-extern s32 EftStreak_Start(s32 objId, s32 kind, s32 arg2, f32 angle);
-#define EftStreak_Stop ((void (*)(s32 handle))EftStreak_Stop)
+/* The task the streak made, as a pointer: it is 8 bytes on a 64-bit build and an s32 handle truncated it (crash of
+   2026-10-17 06:16: EftRushShot_UpdateStageFx, EftStreak_Stop read the task at 0x099c4e28). */
+extern void *EftStreak_Start(s32 objId, s32 kind, s32 arg2, f32 angle);
+extern void EftStreak_Stop(void *sub);
 extern void EftDelaySe_Start(s32 objId, EftSparkTbl *tbl, s32 count);
 extern void EftObj_Destroy(s32 handle);
 #define BtlTask_SetDead ((void (*)(EftTask *task))BtlTask_SetDead)

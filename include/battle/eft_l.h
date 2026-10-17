@@ -178,14 +178,15 @@ typedef struct EftRushShotWork {
     /* 0x5A0 */ f32 timer;
     /* 0x5A4 */ f32 life;
     /* 0x5A8 */ f32 fade;
-    /* 0x5AC */ s32 stageFx[8]; /* handles of the EftStreak_Start effects */
-    /* 0x5CC */ s32 stage;      /* how many events 0x80 were seen */
-    /* 0x5D0 */ s32 subCount;   /* 7 when the manager has a model pack */
-    /* 0x5D4 */ u8 unk5D4[0x5E0 - 0x5D4];
-    /* 0x5E0 */ EftRushShotModel sub[7];
-    /* 0xAB0 */ s32 *unkAB0;    /* camera animation: mgr->sub[slot - 1] for slots 2..4 */
-    /* 0xAB4 */ u8 unkAB4[0xAC0 - 0xAB4];
-} EftRushShotWork; /* size 0xAC0 */
+    /* 0x5AC */ void *stageFx[8]; /* the tasks of the EftStreak_Start effects (the console kept them in 4 bytes each:
+                                    a 64-bit build must not, the pointer did not survive an s32) */
+    /* 0x5EC */ s32 stage;      /* how many events 0x80 were seen */
+    /* 0x5F0 */ s32 subCount;   /* 7 when the manager has a model pack */
+    /* 0x5F4 */ u8 unk5F4[0x600 - 0x5F4];
+    /* 0x600 */ EftRushShotModel sub[7];
+    /* 0xAD0 */ s32 *unkAB0;    /* camera animation: mgr->sub[slot - 1] for slots 2..4 */
+    /* 0xAD4 */ u8 unkAB4[0xAE0 - 0xAD4];
+} EftRushShotWork; /* size 0xAE0 (0xAC0 with 4-byte pointers) */
 
 /* ---- eft_l_b.c: technique effect type 4, the ring shot ---- */
 
