@@ -392,6 +392,8 @@ static int unpack_afs(Iso *iso, const Entry *e, const char *dir) {
     table = malloc((size_t)count * 8);
     if (table == NULL || !read_at(iso, e->offset + 8, table, (size_t)count * 8)) {
         free(table);
+        fprintf(stderr, "bt3: the disc image could not be read (is it complete?)\n");
+        ui_bad("La ISO no se pudo leer.", "Comprueba que la copia esta completa.", NULL);
         return 0;
     }
     for (i = 0; i < count; i++) {
@@ -404,6 +406,7 @@ static int unpack_afs(Iso *iso, const Entry *e, const char *dir) {
         snprintf(path, sizeof(path), "%s%05u.bin", dir, i);
         if (!copy_out(iso, e->offset + table[i * 2], table[i * 2 + 1], path)) {
             free(table);
+            ui_bad("Error al escribir (sin espacio?).", path, NULL);
             return 0;
         }
         sFiles++;
@@ -536,6 +539,7 @@ int Port_IosInstall(const char *isoPath, const char *documents) {
             if (slash != NULL) {
                 *slash = '\0';
                 if (!mkdirs(parent)) {
+                    ui_bad("No se pudieron crear las carpetas.", "Comprueba el espacio libre.", NULL);
                     return 1;
                 }
             }
