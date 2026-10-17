@@ -71,6 +71,15 @@ typedef struct PortStickView { /* [0] the left stick / trigger, [1] the right */
 } PortStickView;
 void PortInput_StickView(int player, PortStickView *out);
 void PortInput_Save(void);
+/* The on-screen controller (gs_input.c; only iOS has one): what ui.cpp draws of it over the picture. The zones
+   are the buttons' rectangles as fractions of the window, each with the pad bit it sends (the bits of Port_TouchPad,
+   the game's pad.h values with 1 = pressed). 0 zones: no on-screen controller (the desktop builds; Android's app
+   draws and sends its own). PortInput_TouchStick: the left stick's ring (where the finger was put down, or where
+   it rests) and the finger's place, also as fractions; 1 while a finger is on the stick. */
+int PortInput_TouchZones(void);
+void PortInput_TouchZone(int index, unsigned *bit, float *x0, float *y0, float *x1, float *y1);
+unsigned PortInput_TouchButtons(void);
+int PortInput_TouchStick(float *rx, float *ry, float *fx, float *fy);
 extern int gPortOverlayOpen;   /* the settings window is open: neither keyboard nor controller reaches the game */
 extern int gPortInputCapture;  /* it is waiting for a key or button to bind: nothing reaches the game */
 extern int gPortChatTyping;    /* a line of the online chat is being typed: the keyboard does not reach the game */

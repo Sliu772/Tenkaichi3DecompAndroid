@@ -2427,6 +2427,108 @@ static void chat_draw(void) {
     ImGui::PopStyleVar(4);
 }
 
+// The on-screen controller of the phone (gs_input.c; only iOS has one): the buttons' zones over the picture, each
+// lit while a finger is on it, and the left stick's ring and ball. Drawing alone: the fingers reached the game
+// long before this (PortInput_Touch), and no ImGui item is made here, so nothing of this takes the touch. While
+// the settings window is open, the zones besides START and SELECT are dead (gs_input.c masks them away): hidden.
+enum { T_SELECT = 0x0001, T_START = 0x0008, T_L1 = 0x0400, T_R1 = 0x0800, T_L2 = 0x0100, T_R2 = 0x0200,
+       T_TRIANGLE = 0x1000, T_CIRCLE = 0x2000, T_CROSS = 0x4000, T_SQUARE = 0x8000 };
+
+static const char *touch_label(unsigned bit) {
+    switch (bit) {
+    case T_SELECT: return "SELECT";
+    case T_START: return "START";
+    case T_L1: return "L1";
+    case T_R1: return "R1";
+    case T_L2: return "L2";
+    case T_R2: return "R2";
+    default: return NULL; // the four faces carry their PlayStation shapes instead
+    }
+}
+
+// A face button's PlayStation symbol, in the DualShock's colours, brighter and thicker while it is pressed.
+static void touch_shape(ImDrawList *dl, unsigned bit, ImVec2 c, float r, bool on) {
+    float t = (r * 0.17f > 2.0f ? r * 0.17f : 2.0f) * (on ? 1.4f : 1.0f);
+    int a = on ? 255 : 200;
+    ImU32 col;
+
+    switch (bit) {
+    case T_TRIANGLE:
+        col = IM_COL32(120, 220, 140, a);
+        dl->AddTriangle(ImVec2(c.x, c.y - r), ImVec2(c.x - 0.87f * r, c.y + 0.5f * r), ImVec2(c.x + 0.87f * r, c.y + 0.5f * r), col, t);
+        break;
+    case T_CIRCLE:
+        col = IM_COL32(240, 120, 140, a);
+        dl->AddCircle(c, r * 0.86f, col, 48, t);
+        break;
+    case T_CROSS:
+        col = IM_COL32(130, 170, 250, a);
+        dl->AddLine(ImVec2(c.x - 0.68f * r, c.y - 0.68f * r), ImVec2(c.x + 0.68f * r, c.y + 0.68f * r), col, t);
+        dl->AddLine(ImVec2(c.x - 0.68f * r, c.y + 0.68f * r), ImVec2(c.x + 0.68f * r, c.y - 0.68f * r), col, t);
+        break;
+    default:
+        col = IM_COL32(230, 140, 230, a);
+        dl->AddRect(ImVec2(c.x - 0.72f * r, c.y - 0.72f * r), ImVec2(c.x + 0.72f * r, c.y + 0.72f * r), col, 0.0f, t, 0);
+        break;
+    }
+}
+
+static void touch_draw(void) {
+    ImGuiIO &io = ImGui::GetIO();
+    float w = io.DisplaySize.x, h = io.DisplaySize.y;
+    float small = w < h ? w : h;
+    float thin = small * 0.006f > 2.0f ? small * 0.006f : 2.0f;
+    unsigned down = PortInput_TouchButtons();
+    bool settings = Ui_IsOpen();
+    ImDrawList *dl = ImGui::GetBackgroundDrawList();
+    ImFont *font = ImGui::GetFont();
+    int zones = PortInput_TouchZones();
+    int i;
+
+    for (i = 0; i < zones; i++) {
+        unsigned bit;
+        float x0, y0, x1, y1;
+        PortInput_TouchZone(i, &bit, &x0, &y0, &x1, &y1);
+        if (settings && bit != T_START && bit != T_SELECT) {
+            continue; // (the game is not given them while the window is open: gs_input.c)
+        }
+        ImVec2 a(x0 * w, y0 * h), b(x1 * w, y1 * h);
+        bool on = (down & bit) != 0;
+        float round = (b.x - a.x < b.y - a.y ? b.x - a.x : b.y - a.y) * 0.3f;
+        dl->AddRectFilled(a, b, on ? IM_COL32(255, 255, 255, 70) : IM_COL32(0, 0, 0, 55), round);
+        dl->AddRect(a, b, on ? IM_COL32(255, 255, 255, 235) : IM_COL32(255, 255, 255, 120), round, thin, 0);
+        const char *label = touch_label(bit);
+        if (label != NULL) {
+            float size = (b.y - a.y) * 0.5f;
+            ImVec2 ts = font->CalcTextSizeA(size, FLT_MAX, 0.0f, label);
+            float room = (b.x - a.x) * 0.78f;
+            if (ts.x > room && ts.x > 0.0f) { // (a long word in a narrow zone: START / SELECT)
+                size *= room / ts.x;
+                ts = font->CalcTextSizeA(size, FLT_MAX, 0.0f, label);
+            }
+            dl->AddText(font, size, ImVec2((a.x + b.x) * 0.5f - ts.x * 0.5f, (a.y + b.y) * 0.5f - ts.y * 0.5f),
+                        on ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 255, 255, 190), label);
+        } else {
+            float r = (b.x - a.x < b.y - a.y ? b.x - a.x : b.y - a.y) * 0.32f;
+            touch_shape(dl, bit, ImVec2((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f), r, on);
+        }
+    }
+    if (!settings) { // the stick rests in plain sight; the settings window is not its place (gs_input.c centres it)
+        float rx, ry, fx, fy, rim = small * 0.18f; // (a push to the rim is the game's full deflection: gs_input.c)
+        int held = PortInput_TouchStick(&rx, &ry, &fx, &fy);
+        ImVec2 ring(rx * w, ry * h), ball(fx * w, fy * h);
+        float dx = ball.x - ring.x, dy = ball.y - ring.y;
+        float d = sqrtf(dx * dx + dy * dy), cap = rim * 0.55f;
+        if (d > cap) { // (the ball stays inside the ring; the game's push still reaches the rim)
+            dx *= cap / d;
+            dy *= cap / d;
+        }
+        dl->AddCircle(ImVec2(ring.x + dx, ring.y + dy), rim * 0.42f,
+                      held ? IM_COL32(255, 255, 255, 210) : IM_COL32(255, 255, 255, 130), 48);
+        dl->AddCircle(ring, rim, held ? IM_COL32(255, 255, 255, 210) : IM_COL32(255, 255, 255, 110), 48, thin * 1.5f);
+    }
+}
+
 // Builds this frame's picture of the overlay (the settings or the online window, the line over the picture).
 // false: there is nothing to draw. The same for both back ends; each then draws ImGui's data its own way.
 static bool frame_build(void) {
@@ -2478,9 +2580,10 @@ static bool frame_build(void) {
         chat_close();
     }
     bool chat = online && (sChat || chat_recent());
+    bool touch = sReady && PortInput_TouchZones() > 0; // (the phone's on-screen controller: iOS alone has one)
     meter_count();
     sBuilt = false;
-    if (!sReady || (!sOpen && !sQuit && !notice && !overlay && !meter && !names && !bars && !chat)) {
+    if (!sReady || (!sOpen && !sQuit && !notice && !overlay && !meter && !names && !bars && !chat && !touch)) {
         return false;
     }
     if (sPadHold && sCapKind != 2) { // a binding was taken: the controller works the window again once nothing is held
@@ -2512,6 +2615,9 @@ static bool frame_build(void) {
     ImGui_ImplSDL3_NewFrame();
     fonts_apply(); // (a face chosen for the fight panels, between two frames)
     ImGui::NewFrame();
+    if (touch) {
+        touch_draw();
+    }
     if (bars) {
         bars_draw();
     }

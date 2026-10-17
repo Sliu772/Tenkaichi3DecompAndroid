@@ -181,9 +181,79 @@ void PortInput_Touch(const SDL_Event *ev) {
     sTouches[slot].y = y;
     touch_send();
 }
+
+/* The overlay (ui.cpp) draws the controller from this (ui.h): the zones above as fractions of the window, the
+   buttons a finger is on, and the left stick's ring and the finger's place, also as fractions. */
+int PortInput_TouchZones(void) {
+    return (int)(sizeof(kTouches) / sizeof(kTouches[0]));
+}
+
+void PortInput_TouchZone(int index, unsigned *bit, float *x0, float *y0, float *x1, float *y1) {
+    const int zones = PortInput_TouchZones();
+
+    if (index < 0 || index >= zones) {
+        return;
+    }
+    *bit = kTouches[index].bit;
+    *x0 = kTouches[index].x0;
+    *y0 = kTouches[index].y0;
+    *x1 = kTouches[index].x1;
+    *y1 = kTouches[index].y1;
+}
+
+unsigned PortInput_TouchButtons(void) {
+    return sTouchButtons;
+}
+
+int PortInput_TouchStick(float *rx, float *ry, float *fx, float *fy) {
+    int i;
+
+    for (i = 0; i < TOUCH_FINGERS; i++) {
+        const Touch *t = &sTouches[i];
+
+        if (t->used && t->stick) {
+            *rx = t->cx / (float)sTouchW;
+            *ry = t->cy / (float)sTouchH;
+            *fx = t->x / (float)sTouchW;
+            *fy = t->y / (float)sTouchH;
+            return 1;
+        }
+    }
+    *rx = 0.21f; /* no finger: the ring sits where the left thumb rests (a finger put down anywhere on the left
+                    side becomes the stick's centre, as the game reads it) */
+    *ry = 0.63f;
+    *fx = *rx;
+    *fy = *ry;
+    return 0;
+}
 #else
 void PortInput_Touch(const SDL_Event *ev) {
     (void)ev; /* iOS alone has the screen's controller (the Android app sends Port_TouchPad itself) */
+}
+
+int PortInput_TouchZones(void) {
+    return 0; /* ...and its own TouchPadView is what the player sees, drawn by the app */
+}
+
+void PortInput_TouchZone(int index, unsigned *bit, float *x0, float *y0, float *x1, float *y1) {
+    (void)index;
+    (void)bit;
+    (void)x0;
+    (void)y0;
+    (void)x1;
+    (void)y1;
+}
+
+unsigned PortInput_TouchButtons(void) {
+    return 0;
+}
+
+int PortInput_TouchStick(float *rx, float *ry, float *fx, float *fy) {
+    (void)rx;
+    (void)ry;
+    (void)fx;
+    (void)fy;
+    return 0;
 }
 #endif
 
