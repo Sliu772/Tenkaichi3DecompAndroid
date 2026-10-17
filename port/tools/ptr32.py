@@ -70,7 +70,11 @@ def apply(data, edits):
 
 def parse(data, args):
     tu = ci.Index.create().parse("in.i", args=args, unsaved_files=[("in.i", data.decode("latin-1"))])
-    errs = [d for d in tu.diagnostics if d.severity >= 3]
+    # The text is parsed as written: the game's pointers are still 8 bytes wide here (the transform below makes
+    # them 4), so a `_Static_assert` on a structure's layout — the port's files carry them (port/src/a11y_game.c)
+    # and libclang 18 accepts `__ptr32` on arm64 without making the pointer 4 bytes — cannot hold at this stage.
+    # The compile of the rewritten text evaluates it again, with the real type: only that one decides.
+    errs = [d for d in tu.diagnostics if d.severity >= 3 and not d.spelling.startswith("static assertion failed")]
     if errs:
         raise RuntimeError(f"{errs[0].spelling} (line {errs[0].location.line})")
     return tu
