@@ -520,11 +520,16 @@ static int vk_init(void) {
     {   /* SDL's Vulkan device asks for features some GPUs lack (Mali: depthClamp, drawIndirectFirstInstance, ...);
            without them, the same device with those features off (depth clipping instead of clamping) */
         SDL_PropertiesID props = SDL_CreateProperties();
+#ifdef __APPLE__ /* no Vulkan there: SDL's Metal back end, and SDL only hands the window to it if MSL is asked for
+                    (its shaders, not SPIR-V: undefined.py translates them with spirv-cross, entry point main0) */
+        SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_MSL_BOOLEAN, true);
+#else
         SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, true);
+#endif
         SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, getenv("BT3_GPU_DEBUG") != NULL);
         sDev = getenv("BT3_GPU_LITE") != NULL ? NULL : SDL_CreateGPUDeviceWithProperties(props);
         if (sDev == NULL) {
-            fprintf(stderr, "bt3: Vulkan device with all features: %s; trying without the optional ones\n", SDL_GetError());
+            fprintf(stderr, "bt3: the GPU device with all features: %s; trying without the optional ones\n", SDL_GetError());
             SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_CLIP_DISTANCE_BOOLEAN, false);
             SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_DEPTH_CLAMPING_BOOLEAN, false);
             SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_INDIRECT_DRAW_FIRST_INSTANCE_BOOLEAN, false);
@@ -532,7 +537,7 @@ static int vk_init(void) {
             sDev = SDL_CreateGPUDeviceWithProperties(props);
             sGpuLite = sDev != NULL;
             if (sDev == NULL) {
-                fprintf(stderr, "bt3: Vulkan device without them: %s\n", SDL_GetError());
+                fprintf(stderr, "bt3: the GPU device without them: %s\n", SDL_GetError());
             }
         }
         SDL_DestroyProperties(props);
