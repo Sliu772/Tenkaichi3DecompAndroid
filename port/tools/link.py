@@ -24,7 +24,9 @@ MAC_BASE = 0x10000000000 + 0x20000000
 IOS_FRAMEWORKS = ["-framework", "UIKit", "-framework", "Metal", "-framework", "QuartzCore", "-framework", "CoreGraphics",
                   "-framework", "CoreAudio", "-framework", "AudioToolbox", "-framework", "AVFoundation",
                   "-framework", "CoreMotion", "-framework", "CoreHaptics", "-framework", "GameController",
-                  "-framework", "CoreBluetooth", "-framework", "ExternalAccessory", "-framework", "OpenGLES"]
+                  "-framework", "CoreBluetooth", "-framework", "ExternalAccessory", "-framework", "OpenGLES",
+                  "-framework", "Foundation", "-framework", "CoreMedia", "-framework", "CoreVideo",
+                  "-framework", "UniformTypeIdentifiers", "-framework", "SystemConfiguration"]
 
 def mac_segments(exe):
     """[(segment, address, size)] of a linked program, from otool."""
