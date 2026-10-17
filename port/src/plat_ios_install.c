@@ -27,6 +27,7 @@
 #define ROM_SHA1 "caee6c2269bba89fc51eea9e7beac3adbec9dc52"
 #define DBZP_SHA1 "4f910969e05d9b25c83af7642b60da9949a4348b"
 #define MAX_ENTRIES 512
+#define MAX_DIRS 128 /* a directory is one run of sectors: the tree of a rebuilt image can name one twice */
 
 typedef struct {
     char path[256]; /* upper case, as the game asks for the files */
@@ -40,8 +41,9 @@ typedef struct {
 } Iso;
 
 static uint8_t sCopyBuf[1 << 18];
-static uint64_t sTotal, sDone;
-static int sFiles, sPercent = -1;
+static uint64_t sTotal, sDone, sIsoSize; /* sIsoSize: the image's own size; a record past it is not data */
+static uint64_t sSeen[MAX_DIRS];         /* the directories already walked, by their first sector */
+static int sFiles, sPercent = -1, sNSeen, sBogus;
 static char sLine3[96]; /* the file being written, for the screen */
 
 /* The install's screen: gs_ios_ui.c, the hard-float road, where SDL_RenderDebugText and SDL_FRect are at home (this
@@ -77,6 +79,14 @@ static int walk(Iso *iso, uint32_t lba, uint32_t size, const char *dir, int dept
     uint8_t *d;
     size_t pos, i;
 
+    for (i = 0; i < (size_t)sNSeen; i++) {
+        if (sSeen[i] == lba) {
+            return 1; /* one directory is one run of sectors: an image that names it twice is not walked twice */
+        }
+    }
+    if (sNSeen < MAX_DIRS) {
+        sSeen[sNSeen++] = lba;
+    }
     d = malloc(size == 0 ? 1 : size);
     if (d == NULL || !read_at(iso, (uint64_t)lba * 2048, d, size)) {
         free(d);
@@ -94,7 +104,7 @@ static int walk(Iso *iso, uint32_t lba, uint32_t size, const char *dir, int dept
             continue;
         }
         len = d[pos];
-        if (pos + len > size) {
+        if (len < 34 || pos + len > size) { /* the fixed fields alone are 33 bytes: anything shorter is not a record */
             break;
         }
         memcpy(&ext, &d[pos + 2], 4);
@@ -107,6 +117,9 @@ static int walk(Iso *iso, uint32_t lba, uint32_t size, const char *dir, int dept
         memcpy(name, &d[pos + 33], nameLen);
         name[nameLen] = '\0';
         pos += len;
+        if (nameLen == 1 && (name[0] == 0 || name[0] == 1)) {
+            continue; /* this directory and its parent: a name of one byte is not text */
+        }
         for (i = 0; name[i] != '\0'; i++) { /* ";1": the file's version */
             if (name[i] == ';') {
                 name[i] = '\0';
@@ -117,35 +130,48 @@ static int walk(Iso *iso, uint32_t lba, uint32_t size, const char *dir, int dept
         if (nameLen > 0 && name[nameLen - 1] == '.') {
             name[nameLen - 1] = '\0';
         }
-        if (nameLen == 1 && (name[0] == 0 || name[0] == 1)) {
-            continue; /* this directory and its parent */
-        }
         for (i = 0; name[i] != '\0'; i++) {
             name[i] = name[i] >= 'a' && name[i] <= 'z' ? (char)(name[i] - 'a' + 'A') : name[i];
         }
+        if (flags & 4) { /* an "associated" file: it belongs to the record before it, and the game has no use of it */
+            continue;
+        }
         if (flags & 2) {
-            if (depth < 8) {
+            if (depth < 8 && (uint64_t)ext * 2048 + bytes <= sIsoSize) {
                 snprintf(full, sizeof(full), "%s%s/", dir, name);
                 if (!walk(iso, ext, bytes, full, depth + 1)) {
                     free(d);
                     return 0;
                 }
+            } else if ((uint64_t)ext * 2048 + bytes > sIsoSize) {
+                if (sBogus < 3) { /* the tree names sectors the image does not hold */
+                    fprintf(stderr, "bt3: a directory of the image names sectors past its end (left out): %s%s/\n", dir, name);
+                }
+                sBogus++;
             }
         } else {
             snprintf(full, sizeof(full), "%s%s", dir, name);
             if (strcmp(full, "SLUS_216.78") == 0 || strncmp(full, "BIN/", 4) == 0 || strncmp(full, "DATA/", 5) == 0) {
-                if (iso->n >= MAX_ENTRIES) {
-                    fprintf(stderr, "bt3: the disc image has more files than expected.\n");
-                    free(d);
-                    return 0;
-                }
-                if (iso->n > 0 && strcmp(iso->list[iso->n - 1].path, full) == 0) {
-                    iso->list[iso->n - 1].size += bytes; /* a file in several extents: they follow each other */
+                if ((uint64_t)ext * 2048 + bytes > sIsoSize) {
+                    if (sBogus < 3) { /* not data: a rebuilt (or damaged) tree can name these */
+                        fprintf(stderr, "bt3: a file of the image names sectors past its end (left out): %s (%u MB at sector %u)\n",
+                                full, (unsigned)(bytes >> 20), (unsigned)ext);
+                    }
+                    sBogus++;
                 } else {
-                    snprintf(iso->list[iso->n].path, sizeof(iso->list[iso->n].path), "%s", full);
-                    iso->list[iso->n].offset = (uint64_t)ext * 2048;
-                    iso->list[iso->n].size = bytes;
-                    iso->n++;
+                    if (iso->n >= MAX_ENTRIES) {
+                        fprintf(stderr, "bt3: the disc image has more files than expected.\n");
+                        free(d);
+                        return 0;
+                    }
+                    if (iso->n > 0 && strcmp(iso->list[iso->n - 1].path, full) == 0) {
+                        iso->list[iso->n - 1].size += bytes; /* a file in several extents: they follow each other */
+                    } else {
+                        snprintf(iso->list[iso->n].path, sizeof(iso->list[iso->n].path), "%s", full);
+                        iso->list[iso->n].offset = (uint64_t)ext * 2048;
+                        iso->list[iso->n].size = bytes;
+                        iso->n++;
+                    }
                 }
             }
         }
@@ -478,6 +504,10 @@ int Port_IosInstall(const char *isoPath, const char *documents) {
     int i;
 
     memset(&iso, 0, sizeof(iso));
+    sTotal = sDone = sIsoSize = 0; /* the report of this install, not of a previous one */
+    sFiles = 0;
+    sPercent = -1;
+    sNSeen = sBogus = 0;
     snprintf(dir, sizeof(dir), "%s/gamedata/", documents);
     snprintf(marker, sizeof(marker), "%s.installed", dir);
     m = fopen(marker, "rb");
@@ -491,6 +521,19 @@ int Port_IosInstall(const char *isoPath, const char *documents) {
         ui_bad("No se pudo abrir la ISO.", isoPath, NULL);
         return 1;
     }
+    {   /* the image's own size: what its records may name (sIsoSize, used by walk) */
+        off_t fsz;
+        fseeko(iso.fp, 0, SEEK_END);
+        fsz = ftello(iso.fp);
+        if (fsz <= 0) {
+            fprintf(stderr, "bt3: the disc image's size could not be read: %s\n", isoPath);
+            ui_bad("No se pudo leer la ISO.", "Vuelve a copiarla al iPhone.", NULL);
+            fclose(iso.fp);
+            return 1;
+        }
+        sIsoSize = (uint64_t)fsz;
+    }
+    fprintf(stderr, "bt3: the disc image is %llu MB\n", (unsigned long long)(sIsoSize >> 20));
     if (!read_at(&iso, 16 * 2048, pvd, sizeof(pvd)) || pvd[0] != 1 || memcmp(pvd + 1, "CD001", 5) != 0) {
         fprintf(stderr, "bt3: this file is not a disc image (.iso). Compressed images (.chd, .cso, .gz)\n"
                         "bt3: have to be converted to .iso first.\n");
@@ -504,6 +547,32 @@ int Port_IosInstall(const char *isoPath, const char *documents) {
     }
     for (i = 0; i < iso.n; i++) {
         sTotal += iso.list[i].size;
+    }
+    {   /* what the tree holds, for the log: the only report when the check below stops the install */
+        int k, j, top[5];
+
+        for (k = 0; k < 5; k++) {
+            top[k] = -1;
+            for (j = 0; j < iso.n; j++) {
+                int used = 0;
+                for (i = 0; i < k; i++) {
+                    if (top[i] == j) {
+                        used = 1;
+                        break;
+                    }
+                }
+                if (!used && (top[k] < 0 || iso.list[j].size > iso.list[top[k]].size)) {
+                    top[k] = j;
+                }
+            }
+        }
+        if (sBogus != 0) {
+            fprintf(stderr, "bt3: %d records of the disc image name sectors past its end (left out)\n", sBogus);
+        }
+        for (k = 0; k < 5 && top[k] >= 0; k++) {
+            fprintf(stderr, "bt3: largest: %s (%llu MB)\n", iso.list[top[k]].path,
+                    (unsigned long long)(iso.list[top[k]].size >> 20));
+        }
     }
     fprintf(stderr, "bt3: unpacking the game's data (%llu MB, %d files on the disc) into gamedata/ ...\n",
             (unsigned long long)(sTotal >> 20), iso.n);
