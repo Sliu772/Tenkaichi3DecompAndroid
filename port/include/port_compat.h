@@ -8,6 +8,12 @@
 
 #define PORT 1
 
+/* iOS: how far above its header the program places the zones the PS2 keeps right after its program (the heap and
+   the game's stack: port/src/plat_mem.c); 0 everywhere else. src/sys/heap.c's heap size uses it. */
+#ifndef BT3_LOW_SHIFT
+#define BT3_LOW_SHIFT 0
+#endif
+
 /* The game's types: on the PS2 `long` is 64 bits. Take over include/types.h. */
 #define TYPES_H
 typedef signed char s8;

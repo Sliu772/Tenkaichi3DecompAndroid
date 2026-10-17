@@ -70,7 +70,9 @@ HeapBlock *Heap_NextBlock(HeapBlock *block) {
 }
 
 void Heap_Create(void) {
-    s32 size = 0x1EFB000 - (u32)D_3BE71C;
+    /* The heap runs from its control block (D_3BE71C) to 0x1EFB000 (the end of the menu overlay) on the console.
+       iOS moves both with the heap (port/src/plat_mem.c, BT3_LOW_SHIFT); its size stays the console's. */
+    s32 size = (0x1EFB000 + BT3_LOW_SHIFT) - (u32)D_3BE71C;
     HeapBlock *start;
 
     size += Mem_Align4Pad(size);

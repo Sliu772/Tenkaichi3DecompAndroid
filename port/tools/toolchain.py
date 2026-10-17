@@ -33,6 +33,14 @@ TRIPLE = MAC_TRIPLE if MAC else IOS_TRIPLE if IOS else None
 # Windows (at 1 TB on macOS); 0 on iOS, where the window starts at the program's own header (the low 4 GB stay
 # unmapped and the program is slid on every launch). macwin.py, macho.py, make_state.py and make_dat.py use it.
 PROGRAM_OFFSET = 0x0 if IOS else 0x20000000
+# iOS: how far above its own header the program places the two zones the PS2 keeps right after its program (the
+# game heap and the game's stack: port/src/plat_mem.c; src/sys/heap.c's heap size moves with it). Large enough for
+# any program, small enough to leave the registers (0x10000000), the port's region (0x13000000) and the scratchpad
+# (0x70000000) at their PS2 addresses, where the game expects them.
+LOW_SHIFT = 0x08000000 if IOS else 0x0
+# What every Apple compile gets on its command line: which window the game's addresses are offsets in (macwin's
+# -bt3-offset, macho.py, make_state.py) and where the low zones are (port_addr.h, plat_mem.c, heap.c).
+APPLE_DEFINES = [f"-DBT3_WINDOW_OFFSET={PROGRAM_OFFSET:#x}", f"-DBT3_LOW_SHIFT={LOW_SHIFT:#x}"] if APPLE else []
 LLVM = pathlib.Path(os.environ.get("BT3_LLVM", "/opt/homebrew/opt/llvm/bin")) if APPLE else None
 
 def llvm(tool):

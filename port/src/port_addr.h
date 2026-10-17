@@ -3,7 +3,8 @@
    The game keeps addresses in 4 bytes (its pointers, the DMA chains, the hardware registers). On Linux and Windows a
    game address IS the host address: everything the game can reach lies below 4 GB. On macOS the low 4 GB cannot be
    mapped, and a game address is an offset in a 4 GB window that starts 0x20000000 below the program
-   (port/tools/macwin/macwin.cpp, docs/port/macos_plan.md).
+   (port/tools/macwin/macwin.cpp, docs/port/macos_plan.md); on iOS the window starts at the program itself
+   (docs/port/ios_plan.md).
 
    Port_Ptr: a game address (a 4-byte value read from the game's memory, a PS2 address) -> a pointer to use here.
    Port_Addr: a pointer to memory the game can reach -> the game address to hand it or to store in its memory.
@@ -15,7 +16,10 @@
 
 #ifdef __APPLE__
 #include <mach-o/ldsyms.h> /* _mh_execute_header: the program's first byte */
-#define PORT_WINDOW ((uintptr_t)&_mh_execute_header - 0x20000000u)
+#ifndef BT3_WINDOW_OFFSET /* (the Apple builds set it: 0x20000000 on macOS, 0 on iOS: toolchain.py, plat_mem.c) */
+#define BT3_WINDOW_OFFSET 0x20000000u
+#endif
+#define PORT_WINDOW ((uintptr_t)&_mh_execute_header - BT3_WINDOW_OFFSET)
 static inline void *Port_Ptr(uint32_t addr) {
     return addr != 0 ? (void *)(PORT_WINDOW + addr) : (void *)0;
 }

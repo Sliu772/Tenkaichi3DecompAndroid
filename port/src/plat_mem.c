@@ -25,9 +25,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define HEAP_BASE 0x003BE000u  /* page that holds the first address */
-#define HEAP_FIRST 0x003BE730u /* what the PS2's malloc returns for the game heap (gHeapStart in a PCSX2 save state) */
-#define HEAP_END 0x02000000u
+/* iOS: the program cannot be given room below it (the system keeps the low 4 GB unmapped, slides the program on
+   every launch and cannot load it elsewhere), so its window starts at its own header (BT3_WINDOW_OFFSET,
+   port_addr.h) and the two zones the PS2 keeps right after its program — the heap and the game's stack — sit
+   BT3_LOW_SHIFT bytes above it; the registers, the port's blocks and the scratchpad stay at their PS2 addresses. */
+#ifndef BT3_LOW_SHIFT /* (the Apple builds set it: 0x08000000 on iOS, 0 elsewhere: toolchain.py) */
+#define BT3_LOW_SHIFT 0
+#endif
+#ifndef BT3_WINDOW_OFFSET
+#define BT3_WINDOW_OFFSET 0x20000000u
+#endif
+#define HEAP_BASE (0x003BE000u + BT3_LOW_SHIFT)  /* page that holds the first address */
+#define HEAP_FIRST (0x003BE730u + BT3_LOW_SHIFT) /* what the PS2's malloc returns for the game heap (gHeapStart in a PCSX2 save state) */
+#define HEAP_END (0x02000000u + BT3_LOW_SHIFT)
 
 static uint32_t sHeapNext = HEAP_FIRST, sHeapEnd = HEAP_END;
 
@@ -200,9 +210,11 @@ int __wrap_main(int argc, char **argv) {
 #include <sys/mman.h>
 #include <unistd.h>
 
-/* The window's base for the game's code (port/tools/macwin/macwin.cpp loads it in every function). */
-void *Port_Window = (char *)&_mh_execute_header - 0x20000000u;
+/* The window's base for the game's code (port/tools/macwin/macwin.cpp loads it in every function): 0x20000000 below
+   the program's header on macOS (link.py places the program there), the header itself on iOS (BT3_WINDOW_OFFSET). */
+void *Port_Window = (char *)&_mh_execute_header - BT3_WINDOW_OFFSET;
 
+#ifndef BT3_IOS /* (iOS: the system slides the program on every launch and there is no re-exec: no window_aligned) */
 /* The window starts on a 4 GB boundary (link.py places the program at 1 TB + 0x20000000), so that the low 32 bits of
    any address in it ARE the game address, as on Linux, where the two are equal: the game passes addresses as
    integers and integers as addresses through its function pointers (a task's argument is a `void *` to some and a
@@ -228,6 +240,7 @@ static void window_aligned(void) {
             (void *)PORT_WINDOW);
     exit(4);
 }
+#endif
 
 static void *map_at(uint32_t addr, uint32_t size) {
     uintptr_t page = (uintptr_t)getpagesize(), at = (PORT_WINDOW + addr) & ~(page - 1);
@@ -254,7 +267,7 @@ static void map_heap(void) {
     map(HEAP_BASE, HEAP_END - HEAP_BASE, "the game heap");
 }
 
-#define STACK_BASE 0x02000000u
+#define STACK_BASE (0x02000000u + BT3_LOW_SHIFT)
 #define STACK_SIZE 0x01000000u
 extern int main(int argc, char **argv);
 extern void Port_CallOnStack(void (*fn)(void), void *top);
@@ -271,6 +284,25 @@ static void game_main(void) {
     sResult = main(sArgc, sArgv);
 }
 
+#ifdef BT3_IOS
+/* SDL's UIKit entry: on iOS the system must run UIApplicationMain for the app (without it there is no window server
+   and SDL cannot open a window). __wrap_main is the program's entry (link.py: -e ___wrap_main); it hands SDL
+   game_entry, which SDL calls on the main thread once the app is up, and the game runs from there, on its stack in
+   the window. */
+extern int SDL_RunApp(int argc, char *argv[], int (*mainFunction)(int, char *[]), void *reserved);
+static int game_entry(int argc, char *argv[]) {
+    sGameStackTop = (uint8_t *)Port_Ptr(STACK_BASE + STACK_SIZE);
+    gPortStage = "the game is running (on its stack in the window, through SDL's UIKit entry)";
+    Port_CallOnStack(game_main, sGameStackTop);
+    return sResult;
+}
+
+int __wrap_main(int argc, char **argv) {
+    sArgc = argc;
+    sArgv = argv;
+    return SDL_RunApp(argc, argv, game_entry, NULL);
+}
+#else
 int __wrap_main(int argc, char **argv) {
     sArgc = argc;
     sArgv = argv;
@@ -279,6 +311,7 @@ int __wrap_main(int argc, char **argv) {
     Port_CallOnStack(game_main, sGameStackTop);
     return sResult;
 }
+#endif
 
 #else
 /* -------------------------------------------------------------------------------------------------------- Linux */
@@ -666,7 +699,7 @@ __attribute__((constructor)) static void Port_MapMemory(void) {
         ExitProcess(4);
     }
 #endif
-#if defined(__APPLE__)
+#if defined(__APPLE__) && !defined(BT3_IOS)
     window_aligned();
 #endif
     gPortStage = "reading the game's programs from gamedata";
@@ -726,6 +759,14 @@ __attribute__((constructor)) static void Port_MapMemory(void) {
         fprintf(stderr, "bt3: the scratchpad's address is taken (not needed)\n");
     } else {
         gPortScratchpadMapped = 1;
+    }
+#elif defined(BT3_IOS)
+    /* iOS: 0x70000000 in the window is 1.75 GB above the program, toward the system's shared caches. Taken if
+       free, not required, as on Android (map_at: the window's page arithmetic, no exit on failure). */
+    if (map_at(0x70000000u, 0x4000) != NULL) {
+        gPortScratchpadMapped = 1;
+    } else {
+        fprintf(stderr, "bt3: the scratchpad's address is taken (not needed)\n");
     }
 #else
     map(0x70000000u, 0x4000, "the scratchpad");

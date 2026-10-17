@@ -2,7 +2,7 @@
 (port/tools/macwin/macwin.cpp, an LLVM pass plugin built here on first use with Homebrew's LLVM) to an .ll file in
 place. See the top of macwin.cpp."""
 import os, pathlib, re, subprocess
-from toolchain import ROOT, llvm, PROGRAM_OFFSET
+from toolchain import ROOT, llvm, PROGRAM_OFFSET, LOW_SHIFT
 
 SRC = ROOT / "port/tools/macwin/macwin.cpp"
 PLUGIN = ROOT / "port/build/macwin.dylib"
@@ -21,7 +21,9 @@ def plugin():
 
 # GNU ld's --wrap and --defsym of link.py's `common` flags, applied by the pass (ld64 has neither)
 WRAP = ["Progress_Main"]
-ABS = {"D_3BE71C": 0x3BE71C}
+# D_3BE71C: the game's heap control block (src/sys/heap.c), at its PS2 address on macOS/Linux/Windows/Android; on
+# iOS the whole heap sits LOW_SHIFT above the program's header (plat_mem.c) and this moves with it.
+ABS = {"D_3BE71C": 0x3BE71C + LOW_SHIFT}
 
 SIGS = ROOT / "port/build/mac_sigs.txt"  # every function the program defines, with its kinds (the top of macwin.cpp)
 

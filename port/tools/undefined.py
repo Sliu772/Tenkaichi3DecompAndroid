@@ -8,7 +8,7 @@ import buildkey
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 # The build variants (BT3_CC): see toolchain.py.
-from toolchain import VARIANT, WIN, MAC, IOS, APPLE, BITS64, PREFIX, CLANG_TARGET, OBJ, DATA, sdl3, llvm, TRIPLE, apple_sdl3
+from toolchain import VARIANT, WIN, MAC, IOS, APPLE, BITS64, PREFIX, CLANG_TARGET, OBJ, DATA, sdl3, llvm, TRIPLE, apple_sdl3, APPLE_DEFINES
 
 # macOS / iOS (Apple, arm64): x86 code-generation flags have no meaning there. Software float is not a front-end
 # option on arm64: the IR is made as usual and the code generator is told there is no floating-point unit
@@ -27,7 +27,7 @@ def variant(cmd):
     if APPLE:
         soft = "-msoft-float" in cmd
         cc = llvm("clang++" if cmd[0] == "g++" else "clang")
-        flags = CLANG_TARGET if (soft or IOS) else ["-arch", "arm64", "-mmacosx-version-min=11.0"]
+        flags = (CLANG_TARGET if (soft or IOS) else ["-arch", "arm64", "-mmacosx-version-min=11.0"]) + APPLE_DEFINES
         if not soft:  # the renderer, the settings window and the port's own code
             flags += [f"-I{apple_sdl3()}/include"]
         return [cc] + flags + [a for a in cmd[1:] if a not in MAC_DROP] + (["-fms-extensions"] + MAC_FLAGS if soft else [])
